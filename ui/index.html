@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FinOKF Vault</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="workspace">
+      <section class="main-panel" aria-label="Graph and markdown viewer">
+        <nav class="view-rail" aria-label="Viewer switcher">
+          <button id="graphViewButton" class="view-button active" type="button" data-view="graph" aria-label="Show graph" title="Graph view">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="6" cy="7" r="2.5"></circle>
+              <circle cx="17" cy="5" r="2.5"></circle>
+              <circle cx="18" cy="17" r="2.5"></circle>
+              <circle cx="7" cy="18" r="2.5"></circle>
+              <path d="M8.4 6.4 14.6 5.5M7.3 9.1 16.4 15.4M15.6 17.2 9.4 17.8"></path>
+            </svg>
+          </button>
+          <button id="markdownViewButton" class="view-button" type="button" data-view="markdown" aria-label="Show markdown" title="Markdown view">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 3.5h8l4 4V20.5H6z"></path>
+              <path d="M14 3.5V8h4"></path>
+              <path d="M8.5 12h7M8.5 15h7M8.5 18h4"></path>
+            </svg>
+          </button>
+        </nav>
+
+        <div class="view-stack">
+          <section id="graphView" class="viewer graph-view active" aria-label="Directional graph">
+            <canvas id="graphCanvas" aria-label="Animated directional graph"></canvas>
+
+            <div class="graph-search">
+              <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+              <input id="graphSearch" type="text" autocomplete="off" spellcheck="false" placeholder="Search notes…" />
+              <div id="searchResults" class="search-results" role="listbox"></div>
+            </div>
+
+            <div class="graph-controls" role="group" aria-label="Graph controls">
+              <button data-zoom="in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+              <button data-zoom="out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+              <button data-zoom="reset" type="button" title="Fit graph" aria-label="Fit graph">⤢</button>
+              <button data-graph="home" type="button" title="Overview" aria-label="Overview">⌂</button>
+            </div>
+
+            <div id="graphStatus" class="graph-status"></div>
+            <div class="graph-legend" id="graphLegend" aria-hidden="true"></div>
+          </section>
+
+          <section id="markdownView" class="viewer markdown-view" aria-label="Markdown reader">
+            <header class="doc-titlebar">
+              <div class="doc-title" id="docTitle" title="">Select a note</div>
+              <div class="doc-actions">
+                <span id="saveState" class="save-state"></span>
+                <button id="editToggle" class="doc-btn" type="button" title="Toggle edit mode">Edit</button>
+                <button id="saveButton" class="doc-btn primary" type="button" title="Save (⌘/Ctrl+S)" disabled>Save</button>
+              </div>
+            </header>
+            <div class="doc-body">
+              <article id="docRendered" class="markdown-rendered">Loading…</article>
+              <textarea id="docEditor" class="markdown-editor" spellcheck="false" hidden></textarea>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="chat-panel" aria-label="Research chat">
+        <div class="chat-head">Research assistant</div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <form id="chatForm" class="chat-form">
+          <input id="chatInput" type="text" autocomplete="off" placeholder="Ask about the selected note" />
+          <button type="submit">Ask</button>
+        </form>
+      </aside>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
