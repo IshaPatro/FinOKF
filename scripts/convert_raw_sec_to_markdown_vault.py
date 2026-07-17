@@ -46,23 +46,84 @@ from typing import Any, Iterable
 
 
 SCHEMA_VERSION = "finokf-vault/1.0"
+DATA_ROOT = Path(os.environ.get("FINOKF_DATA_ROOT", "data"))
 
 # Namespace hosts that indicate a STANDARD taxonomy (anything else is a filer extension).
 STANDARD_NS_HOSTS = ("fasb.org", "xbrl.sec.gov", "xbrl.org", "w3.org", "sec.gov")
 SUMMATION_ARCROLE = "http://www.xbrl.org/2003/arcrole/summation-item"
 
-# Raw files we never turn into source notes (download bookkeeping and SEC index pages).
-SKIP_SOURCE_FILES = {"metadata.json", "index.json"}
-SKIP_SOURCE_PATTERNS = (re.compile(r"-index\.html?$", re.I), re.compile(r"-index-headers\.html?$", re.I))
+# The vault deliberately retains only the evidence artifacts that an analyst can use:
+# the human-readable filing, the XBRL instance that carries the reported values, and
+# the calculation linkbase that carries summation relationships.  Presentation,
+# label, definition, schema, index, and SEC-submission wrapper files are supporting
+# transport artifacts; converting each of them to Markdown creates noise without
+# adding filing data.
+SOURCE_PREVIEW_CHARS = 12000
+FRONTMATTER_EDGE_LIMITS = {
+    "finance.entity": 40,
+    "finance.filing": 55,
+    "finance.fact": 24,
+    "finance.source": 12,
+    "finance.constraint": 36,
+    "finokf.bundle_view": 55,
+}
+IMPORTANT_FACT_KEYWORDS = (
+    "revenue",
+    "sales",
+    "grossprofit",
+    "operatingincome",
+    "operatingloss",
+    "netincome",
+    "profitloss",
+    "earningspershare",
+    "assets",
+    "liabilities",
+    "stockholdersequity",
+    "cashandcashequivalents",
+    "operatingactivities",
+    "investingactivities",
+    "financingactivities",
+    "debt",
+    "interestexpense",
+    "researchanddevelopment",
+    "sellinggeneralandadministrative",
+    "capitalexpenditure",
+)
 
+# Information facets exposed in note properties.  These are deliberately broad and
+# stable so an analyst can filter the vault without depending on filer-specific XBRL
+# concept names.  A filing receives the union of facets matched by all of its facts;
+# an individual fact receives the facets matched by its own concept.
+INFORMATION_TAG_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("earnings", ("earning", "profitloss", "netincome", "netloss", "income")),
+    ("revenue", ("revenue", "sales", "turnover")),
+    ("profitability", ("grossprofit", "operatingincome", "operatingloss", "profitloss", "netincome", "netloss")),
+    ("margins", ("margin", "grossprofit", "operatingincome")),
+    ("cash-flow", ("cashandcashequivalents", "cashflow", "operatingactivities", "investingactivities", "financingactivities")),
+    ("balance-sheet", ("assets", "liabilities", "stockholdersequity", "stockholdersequity", "equity")),
+    ("assets", ("asset", "cashandcashequivalents", "inventory", "receivable", "propertyplantandequipment", "goodwill", "intangible")),
+    ("liabilities", ("liabilit", "payable", "accrued", "debt", "lease")),
+    ("debt", ("debt", "borrow", "notespayable", "longtermdebt", "creditfacility")),
+    ("equity", ("equity", "stockholder", "shareholder", "additionalpaidincapital", "retainedearnings")),
+    ("shares-and-eps", ("earningspershare", "weightedaverageshares", "commonstockshares", "sharesoutstanding", "stockbased")),
+    ("dividends", ("dividend", "distribution")),
+    ("taxes", ("incometax", "taxexpense", "taxpayable", "deferredtax")),
+    ("interest", ("interestexpense", "interestincome")),
+    ("research-and-development", ("researchanddevelopment", "研发")),
+    ("selling-general-and-administrative", ("sellinggeneralandadministrative", "generalandadministrative")),
+    ("capital-expenditure", ("capitalexpenditure", "capitalizedcost", "propertyplantandequipment")),
+    ("investments", ("investment", "marketablesecurities", "shortterminvestment")),
+    ("acquisitions", ("acquisition", "businesscombination", "merger")),
+    ("segments", ("segment", "operatingsegment")),
+)
 
 # --------------------------------------------------------------------------------------
 # Arguments
 # --------------------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Convert raw SEC XBRL filings into Markdown vault notes.")
-    parser.add_argument("--input-dir", default="data/raw/sp100_sec_core", help="Raw SEC download directory.")
-    parser.add_argument("--output-dir", default="data/processed", help="Markdown vault output directory.")
+    parser.add_argument("--input-dir", default=str(DATA_ROOT / "raw" / "sp100_sec_core"), help="Raw SEC download directory.")
+    parser.add_argument("--output-dir", default=str(DATA_ROOT / "processed"), help="Markdown vault output directory.")
     parser.add_argument("--tickers", nargs="+", default=None, help="Only convert these tickers, e.g. AAPL MSFT.")
     parser.add_argument("--limit", type=int, default=None, help="Only convert the first N companies.")
     parser.add_argument(
@@ -76,6 +137,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="Cap on stored primary-document text (0 = unlimited, keep everything).",
+    )
+    parser.add_argument(
+        "--tag-catalog",
+        default=str(DATA_ROOT / "unique-tags.json"),
+        help="Path for the generated catalog of every tag used in the Markdown vault.",
     )
     return parser.parse_args()
 
@@ -94,6 +160,30 @@ def rel_link(from_path: Path, to_path: Path) -> str:
 
 def wiki_link(path: Path) -> str:
     return f"[[{path.stem}]]"
+
+
+def humanize_concept(value: str) -> str:
+    local = str(value).split(":")[-1]
+    local = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", local)
+    local = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", local)
+    return local.replace("_", " ").strip()
+
+
+def format_decimal(value: str | Decimal) -> str:
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return str(value)
+    text = f"{number:,.8f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def format_period(period: dict[str, Any]) -> str:
+    if period.get("kind") == "instant":
+        return f"As of {period.get('end') or 'n/a'}"
+    start = period.get("start") or "n/a"
+    end = period.get("end") or "n/a"
+    return f"{start} to {end}"
 
 
 def load_json(path: Path) -> Any:
@@ -147,6 +237,56 @@ def sha256_obj(obj: Any) -> str:
 
 def short_hash(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+
+
+def information_tags_for_concepts(concepts: Iterable[str]) -> list[str]:
+    """Return stable semantic tags for the supplied XBRL concept names."""
+    normalized = " ".join(str(concept).lower().replace("_", "") for concept in concepts)
+    tags = [f"information/{name}" for name, needles in INFORMATION_TAG_RULES if any(needle in normalized for needle in needles)]
+    return sorted(set(tags))
+
+
+def information_tags_for_fact(fact: "CanonicalFact") -> list[str]:
+    tags = information_tags_for_concepts((fact.concept_local,))
+    if fact.dimensions:
+        tags.append("information/segments")
+    return sorted(set(tags)) or ["information/other"]
+
+
+def flashokf_roles(concept: str) -> list[str]:
+    """Map one XBRL concept to stable, cross-company query roles."""
+    local = concept.split(":")[-1]
+    normalized = re.sub(r"[^a-z0-9]", "", local.lower())
+    exact_roles: dict[str, set[str]] = {
+        "revenue": {
+            "revenues",
+            "salesrevenuenet",
+            "salesrevenuegoodsnet",
+            "revenuefromcontractwithcustomerexcludingassessedtax",
+            "revenuefromcontractwithcustomerincludingassessedtax",
+        },
+        "cost_of_revenue": {"costofrevenue", "costofgoodsandservicessold", "costofgoodssold", "costofsales"},
+        "gross_profit": {"grossprofit"},
+        "operating_income": {"operatingincomeloss"},
+        "net_income": {"netincomeloss", "profitloss"},
+        "assets": {"assets"},
+        "liabilities": {"liabilities"},
+        "equity": {"stockholdersequity", "stockholdersequityincludingportionattributabletononcontrollinginterest"},
+        "cash": {"cashandcashequivalentsatcarryingvalue", "cashcashequivalentsrestrictedcashandrestrictedcashequivalents"},
+        "operating_cash_flow": {"netcashprovidedbyusedinoperatingactivities"},
+        "investing_cash_flow": {"netcashprovidedbyusedininvestingactivities"},
+        "financing_cash_flow": {"netcashprovidedbyusedinfinancingactivities"},
+    }
+    roles = [role for role, names in exact_roles.items() if normalized in names]
+    if normalized.startswith("earningspershare"):
+        roles.append("eps")
+    if "weightedaveragenumberofshares" in normalized or normalized.endswith("sharesoutstanding"):
+        roles.append("shares")
+    return roles
+
+
+def merge_tags(*groups: Iterable[str]) -> list[str]:
+    return sorted({str(tag) for group in groups for tag in group if str(tag).strip()})
 
 
 # --------------------------------------------------------------------------------------
@@ -217,11 +357,29 @@ class Node:
     payload: dict[str, Any]
 
 
+def compact_frontmatter(frontmatter: dict[str, Any], node_type: str) -> dict[str, Any]:
+    """Keep files readable while preserving enough typed edges for graph traversal."""
+    compact: dict[str, Any] = {}
+    for key, value in frontmatter.items():
+        if key == "backlinks":
+            continue
+        if key == "edges":
+            limit = FRONTMATTER_EDGE_LIMITS.get(node_type, 30)
+            edges = list(value or [])
+            compact["edges"] = edges[:limit]
+            if len(edges) > limit:
+                compact["edge_count"] = len(edges)
+                compact["edge_note"] = f"Showing first {limit} machine edges; full evidence list is summarized in the note body and payload."
+            continue
+        compact[key] = value
+    return compact
+
+
 def write_node(node: Node) -> None:
     node.path.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["---", *dump_yaml(node.frontmatter), "---", "", f"# {node.heading}", ""]
+    lines = ["---", *dump_yaml(compact_frontmatter(node.frontmatter, node.node_type)), "---", "", f"# {node.heading}", ""]
     lines.extend(node.body)
-    lines.extend(["", f"```{node.fence}", json.dumps(node.payload, indent=2), "```", ""])
+    lines.extend(["", "## Machine Payload", "", f"```{node.fence}", json.dumps(node.payload, indent=2), "```", ""])
     node.path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -564,6 +722,32 @@ def find_instance_and_calc(filing_dir: Path) -> tuple[Path | None, Path | None]:
     return instance, calc
 
 
+def retained_source_files(filing: FilingRaw) -> list[Path]:
+    """Return the small, evidence-bearing source set for one filing.
+
+    The ordered set is intentionally narrow: the primary HTML document supports
+    qualitative review, the instance supports every numeric fact, and the
+    calculation linkbase supports the calculation constraints.  Keeping this
+    policy here prevents empty XSD/label/presentation XML notes from reaching
+    either Obsidian or the viewer.
+    """
+    candidates: list[Path] = []
+    if filing.primary_document:
+        candidates.append(filing.raw_folder / filing.primary_document)
+    if filing.instance_path is not None:
+        candidates.append(filing.instance_path)
+    if filing.calc_path is not None:
+        candidates.append(filing.calc_path)
+
+    retained: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file() and candidate not in seen:
+            retained.append(candidate)
+            seen.add(candidate)
+    return retained
+
+
 # ---- path builders --------------------------------------------------------------------
 def entity_path(out: Path, ticker: str) -> Path:
     return out / "entities" / f"{safe_name(ticker)}-entity.md"
@@ -781,6 +965,78 @@ def link_period_neighbors(facts: list[CanonicalFact]) -> None:
                 fact.extra_edges.append({"rel": "next_period", "target": nxt.fact_id, "path": rel_link(fact.path, nxt.path)})
 
 
+def reported_value(fact: CanonicalFact) -> str:
+    try:
+        base = Decimal(fact.value) * Decimal(fact.scale)
+        value = format_decimal(base)
+    except (InvalidOperation, ValueError):
+        value = fact.value
+    if fact.unit.currency == "USD":
+        return f"${value}"
+    return f"{value} {fact.unit.label}".strip()
+
+
+def fact_score(fact: CanonicalFact, filing_id: str) -> tuple[int, str]:
+    concept = fact.concept_local.lower()
+    role_score = 18 if any(o.filing.filing_id == filing_id and o.role == "primary" for o in fact.occurrences) else 0
+    standard_score = 8 if fact.namespace in {"us-gaap", "dei"} else 0
+    dimension_score = 0 if fact.dimensions else 8
+    keyword_score = 0
+    for index, keyword in enumerate(IMPORTANT_FACT_KEYWORDS):
+        if keyword in concept:
+            keyword_score = max(keyword_score, 80 - index)
+    return role_score + standard_score + dimension_score + keyword_score, fact.concept_local
+
+
+def key_facts_for_filing(filing_id: str, fact_ids: list[str], fact_lookup: dict[str, CanonicalFact], limit: int = 18) -> list[CanonicalFact]:
+    facts = [fact_lookup[fid] for fid in fact_ids if fid in fact_lookup]
+    scored = sorted(facts, key=lambda f: (-fact_score(f, filing_id)[0], f.concept_local, f.fact_id))
+    result: list[CanonicalFact] = []
+    seen: set[str] = set()
+    for fact in scored:
+        family = fact.concept_local.lower()
+        if family in seen and len(result) >= limit // 2:
+            continue
+        seen.add(family)
+        result.append(fact)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def fact_bullet(out: Path, fact: CanonicalFact) -> str:
+    label = humanize_concept(fact.concept_local)
+    period = format_period(fact.period)
+    suffix = " extension" if fact.is_extension else ""
+    return f"- {wiki_link(fact.path)} — **{label}**: `{reported_value(fact)}` for `{period}`{suffix}"
+
+
+def filing_fact_record(filing: FilingRaw, fact: CanonicalFact) -> dict[str, Any]:
+    """Serialize the value *as filed in this accession*, not a later restatement."""
+    occurrence = next(o for o in fact.occurrences if o.filing.filing_id == filing.filing_id)
+    return {
+        "fact_id": fact.fact_id,
+        "concept": fact.concept,
+        "label": humanize_concept(fact.concept_local),
+        "value": occurrence.value,
+        "raw_value": occurrence.lexical,
+        "scale": occurrence.scale,
+        "unit": fact.unit.label,
+        "currency": fact.unit.currency,
+        "decimals": occurrence.decimals,
+        "period": {
+            key: fact.period[key]
+            for key in ("start", "end", "kind", "context_id", "fiscal_year", "fiscal_period")
+        },
+        "dimensions": fact.dimensions,
+        "is_extension": fact.is_extension,
+        "reporting_role": occurrence.role,
+        "element_id": occurrence.element_id,
+        "source_file": filing.instance_path.name if filing.instance_path else filing.primary_document,
+        "note": wiki_link(fact.path),
+    }
+
+
 # ---- note builders --------------------------------------------------------------------
 def build_source_node(out: Path, filing: FilingRaw, raw_file: Path, is_primary: bool, max_source_chars: int) -> Node:
     note_path = source_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession, raw_file.name)
@@ -791,6 +1047,11 @@ def build_source_node(out: Path, filing: FilingRaw, raw_file: Path, is_primary: 
     if stored_text and max_source_chars and len(stored_text) > max_source_chars:
         stored_text = stored_text[:max_source_chars]
         truncated = True
+    preview_text = stored_text
+    preview_truncated = truncated
+    if preview_text and len(preview_text) > SOURCE_PREVIEW_CHARS:
+        preview_text = preview_text[:SOURCE_PREVIEW_CHARS]
+        preview_truncated = True
     content_hash = sha256_file(raw_file)
 
     payload = {
@@ -800,25 +1061,40 @@ def build_source_node(out: Path, filing: FilingRaw, raw_file: Path, is_primary: 
         "source_path": str(raw_file),
         "content_hash": content_hash,
         "bytes": raw_file.stat().st_size,
-        "full_text_stored": bool(stored_text),
-        "text_truncated": truncated,
+        "text_preview_stored": bool(preview_text),
+        "text_preview_truncated": preview_truncated,
     }
     frontmatter = {
         "schema_version": SCHEMA_VERSION,
         "type": "finance.source",
         "id": source_id,
         "title": raw_file.name,
-        "tags": ["finokf/source", f"company/{filing.ticker}", f"form/{filing.form}"],
+        "tags": ["finokf/source", "information/source-document", f"company/{filing.ticker}", f"form/{filing.form}"],
         "edges": [{"rel": "belongs_to", "target": filing.filing_id, "path": rel_link(note_path, filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))}],
         "backlinks": [],
         "graph": {"out_degree": 1, "in_degree": 0, "content_hash": content_hash, "authoritative": True},
         "finokf": {"entity": filing.ticker, "cik": filing.cik, "accession": filing.accession, "source_file": raw_file.name, "source_path": str(raw_file), "is_primary_document": is_primary},
     }
-    body = [f"Raw SEC file `{raw_file.name}` from {wiki_link(filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))}.", "", f"Path: `{raw_file}`", f"SHA-256: `{content_hash}`"]
-    if stored_text:
-        body += ["", "## Full Text" if not truncated else "## Text (truncated)", "", "```text", *stored_text.splitlines(), "```"]
-        if truncated:
-            body += ["", "_Stored text truncated by --max-source-chars._"]
+    body = [
+        "## Analyst Note",
+        "",
+        f"This is the captured SEC source file for {wiki_link(filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))}.",
+        "Use it when checking whether a fact or filing note can be traced back to the original SEC artifact.",
+        "",
+        "## Source Details",
+        "",
+        f"- Company: `{filing.ticker}`",
+        f"- Form: `{filing.form}`",
+        f"- Filing accession: `{filing.accession}`",
+        f"- File name: `{raw_file.name}`",
+        f"- Primary filing document: `{is_primary}`",
+        f"- Local raw path: `{raw_file}`",
+        f"- SHA-256: `{content_hash}`",
+    ]
+    if preview_text:
+        body += ["", "## Extracted Text Preview", "", "```text", *preview_text.splitlines(), "```"]
+        if preview_truncated:
+            body += ["", "_Preview truncated for readability; the raw file path above remains the source of record._"]
     return Node(note_path, source_id, "finance.source", frontmatter, raw_file.name, body, "finokf.source", payload)
 
 
@@ -832,12 +1108,14 @@ def build_filing_node(out: Path, filing: FilingRaw, source_nodes: list[Node], fa
         reports_edges.append({"rel": "reports", "target": fact_id, "path": rel_link(note_path, fact.path), "role": role})
 
     edges = [{"rel": "filed_by", "target": f"entity:{filing.ticker}", "path": rel_link(note_path, entity_path(out, filing.ticker))}, *source_edges, *reports_edges]
+    filing_facts = [fact_lookup[fact_id] for fact_id in fact_ids if fact_id in fact_lookup]
+    filing_information_tags = information_tags_for_concepts(fact.concept_local for fact in filing_facts) or ["information/other"]
     frontmatter = {
         "schema_version": SCHEMA_VERSION,
         "type": "finance.filing",
         "id": filing.filing_id,
         "title": f"{filing.ticker} FY{filing.fiscal_year} {filing.form}",
-        "tags": ["finokf/filing", f"company/{filing.ticker}", f"form/{filing.form}", f"period/FY{filing.fiscal_year}"],
+        "tags": merge_tags(["finokf/filing", f"company/{filing.ticker}", f"form/{filing.form}", f"period/FY{filing.fiscal_year}"], filing_information_tags),
         "edges": edges,
         "backlinks": [],
         "graph": {"out_degree": len(edges), "in_degree": 0, "authoritative": True},
@@ -848,15 +1126,65 @@ def build_filing_node(out: Path, filing: FilingRaw, source_nodes: list[Node], fa
             "fact_count": len(fact_ids), "source_count": len(source_nodes),
         },
     }
-    payload = {"filing_id": filing.filing_id, "entity": filing.ticker, "form": filing.form, "fiscal_year": filing.fiscal_year, "report_date": filing.report_date, "filing_date": filing.filing_date, "accession": filing.accession, "primary_document": filing.primary_document, "fact_ids": fact_ids}
+    complete_fact_inventory = [filing_fact_record(filing, fact) for fact in filing_facts]
+    payload = {
+        "filing_id": filing.filing_id,
+        "entity": filing.ticker,
+        "form": filing.form,
+        "fiscal_year": filing.fiscal_year,
+        "report_date": filing.report_date,
+        "filing_date": filing.filing_date,
+        "accession": filing.accession,
+        "primary_document": filing.primary_document,
+        "fact_ids": fact_ids,
+    }
+    key_facts = key_facts_for_filing(filing.filing_id, fact_ids, fact_lookup)
+    primary_source = next((n for n in source_nodes if n.frontmatter.get("finokf", {}).get("is_primary_document")), None)
     body = [
-        f"{wiki_link(entity_path(out, filing.ticker))} filed a `{filing.form}` for report date `{filing.report_date}`.",
+        "## Analyst Summary",
         "",
-        f"- Filing date: `{filing.filing_date}`",
-        f"- Accession: `{filing.accession}`",
-        f"- Primary document: `{filing.primary_document}`",
-        f"- Facts reported: `{len(fact_ids)}`",
-        f"- Source files captured: `{len(source_nodes)}`",
+        f"{wiki_link(entity_path(out, filing.ticker))} filed a **{filing.form}** covering fiscal year **{filing.fiscal_year}**.",
+        "This note is the filing-level evidence hub: start here to inspect the source documents and the most research-relevant reported facts.",
+        "",
+        "## Filing Snapshot",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        f"| Company | `{filing.ticker}` |",
+        f"| Form | `{filing.form}` |",
+        f"| Fiscal year | `{filing.fiscal_year}` |",
+        f"| Report date | `{filing.report_date}` |",
+        f"| Filing date | `{filing.filing_date}` |",
+        f"| Accession | `{filing.accession}` |",
+        f"| Primary document | `{filing.primary_document}` |",
+        f"| Captured facts | `{len(fact_ids)}` |",
+        f"| Captured source files | `{len(source_nodes)}` |",
+        "",
+        "## Key Reported Facts",
+        "",
+        *(fact_bullet(out, fact) for fact in key_facts),
+        "",
+        "## Complete Fact Inventory",
+        "",
+        "Every numeric fact reported in this accession is included below in a structured, filing-specific record. Values are not replaced by a later comparative or restatement; each record links to its canonical fact note for cross-filing history.",
+        "",
+        "```yaml",
+        *dump_yaml({"facts": complete_fact_inventory}),
+        "```",
+        "",
+        "## Source Trail",
+        "",
+    ]
+    if primary_source:
+        body.append(f"- Primary source: {wiki_link(primary_source.path)}")
+    body.extend(f"- Source file: {wiki_link(n.path)}" for n in source_nodes if n is not primary_source)
+    body += [
+        "",
+        "## Research Checks",
+        "",
+        "- Match any quoted value to the filing-specific inventory and then to its XBRL instance source.",
+        "- Prefer facts marked as primary-period values when building charts.",
+        "- Treat extension-tag facts as company-specific and inspect their source context before comparing across issuers.",
     ]
     return Node(note_path, filing.filing_id, "finance.filing", frontmatter, f"{filing.ticker} FY{filing.fiscal_year} {filing.form}", body, "finokf.filing", payload)
 
@@ -910,6 +1238,7 @@ def build_fact_node(out: Path, fact: CanonicalFact, filing_lookup: dict[str, Fil
         },
     }
     tags = ["finokf/fact", f"company/{fact.ticker}", f"namespace/{fact.namespace}", f"unit/{safe_name(fact.unit.label)}", f"period/FY{fact.period['fiscal_year']}"]
+    tags.extend(information_tags_for_fact(fact))
     if fact.is_extension:
         tags.append("finokf/extension")
     if fact.dimensions:
@@ -932,18 +1261,60 @@ def build_fact_node(out: Path, fact: CanonicalFact, filing_lookup: dict[str, Fil
             "provenance": {"accession": auth_filing.accession, "element_id": fact.authoritative.element_id, "source_file": instance_name, "superseded": fact.superseded},
         },
     }
+    reported_in = [
+        f"- `{o.role}` in {wiki_link(filing_path(out, fact.ticker, o.filing.fiscal_year, o.filing.form, o.filing.accession))}"
+        for o in fact.occurrences[:12]
+    ]
     body = [
-        f"Value: `{fact.value}` `{fact.unit.label}` (scale `{fact.scale}`, decimals `{fact.decimals}`)",
-        f"Period: `{fact.period.get('start') or 'n/a'}` to `{fact.period.get('end') or 'n/a'}` ({fact.period['kind']})",
-        f"Concept: `{fact.concept}`" + ("  _(extension tag)_" if fact.is_extension else ""),
+        "## Analyst Summary",
+        "",
+        f"**{humanize_concept(fact.concept_local)}** was reported as `{reported_value(fact)}` for `{format_period(fact.period)}`.",
+        "This note is one canonical XBRL fact. Use it as the atomic evidence unit behind charts, ratios, and CertiFact checks.",
+        "",
+        "## Fact Snapshot",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        f"| Company | `{fact.ticker}` |",
+        f"| Concept | `{fact.concept}` |",
+        f"| Display value | `{reported_value(fact)}` |",
+        f"| Stored value | `{fact.value}` |",
+        f"| Raw filed value | `{fact.lexical}` |",
+        f"| Unit | `{fact.unit.label}` |",
+        f"| Scale | `{fact.scale}` |",
+        f"| Decimals | `{fact.decimals}` |",
+        f"| Period | `{format_period(fact.period)}` |",
+        f"| Fiscal period | `FY{fact.period.get('fiscal_year')} {fact.period.get('fiscal_period')}` |",
+        f"| Source tag type | `{'extension' if fact.is_extension else 'standard taxonomy'}` |",
+        f"| Quarantined | `{fact.quarantined}` |",
     ]
     if envelope:
-        body.append(f"Rounding envelope (base units): `[{envelope[0]}, {envelope[1]}]`")
+        body += ["", "## Rounding Envelope", "", f"- Base-unit interval: `[{envelope[0]}, {envelope[1]}]`"]
     if fact.dimensions:
-        body += ["", "## Dimensions", "", *[f"- `{axis}` = `{member}`" for axis, member in sorted(fact.dimensions.items())]]
-    body += ["", "## Reported In", "", *[f"- {o.role}: {wiki_link(filing_path(out, fact.ticker, o.filing.fiscal_year, o.filing.form, o.filing.accession))}" for o in fact.occurrences[:12]]]
+        body += ["", "## Segment / Dimension Context", "", *[f"- `{axis}` = `{member}`" for axis, member in sorted(fact.dimensions.items())]]
+    body += [
+        "",
+        "## Source Trail",
+        "",
+        f"- Authoritative accession: `{auth_filing.accession}`",
+        f"- Source file: {wiki_link(source_note)}",
+        f"- XBRL context: `{fact.period['context_id']}`",
+        f"- Element id: `{fact.authoritative.element_id or 'n/a'}`",
+        "",
+        "## Reported In",
+        "",
+        *reported_in,
+    ]
     if fact.superseded:
-        body += ["", f"_Restated: {len(fact.superseded)} earlier value(s) superseded by accession `{auth_filing.accession}`._"]
+        body += ["", f"_Restatement note: {len(fact.superseded)} earlier value(s) were superseded by accession `{auth_filing.accession}`._"]
+    body += [
+        "",
+        "## Research Checks",
+        "",
+        "- Confirm the period and unit before comparing this value with another company or year.",
+        "- If this uses an extension tag, inspect the source filing before using it in peer comparisons.",
+        "- Use `prior_period` / `next_period` graph links for trend work when available.",
+    ]
     return Node(fact.path, fact.fact_id, "finance.fact", frontmatter, frontmatter["title"], body, "finokf.fact", payload)
 
 
@@ -1002,18 +1373,47 @@ def build_constraint_nodes(out: Path, filing: FilingRaw, facts_by_concept_period
             "type": "finance.constraint",
             "id": constraint_id,
             "title": f"{filing.ticker} FY{filing.fiscal_year} {parent_local} subtotal",
-            "tags": ["finokf/constraint", f"company/{filing.ticker}", f"period/FY{filing.fiscal_year}"],
+            "tags": ["finokf/constraint", "information/reconciliation", f"company/{filing.ticker}", f"period/FY{filing.fiscal_year}"],
             "edges": edges,
             "backlinks": [],
             "graph": {"out_degree": len(edges), "in_degree": 0, "authoritative": True},
             "finokf": {"entity": filing.ticker, "filing_id": filing.filing_id, "constraint_kind": "children_exhaust_subtotal", "role": group["role"], "exhaustive": exhaustive, "components_resolved": resolved, "components_total": len(group["children"]), "tolerance": "xbrl-decimals", "self_check": "not-run"},
         }
         body = [
-            f"Summation from the calculation linkbase of {wiki_link(filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))}.",
+            "## Analyst Summary",
             "",
-            f"`{parent_concept}` = " + " + ".join(f"({c['weight']:+d})·`{c['concept'].split(':')[-1]}`" for c in group["children"]),
+            f"This calculation check comes from the XBRL calculation linkbase in {wiki_link(filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))}.",
+            "It describes how a subtotal should reconcile to its reported components.",
             "",
-            f"Components resolved to facts for the primary period: `{resolved}/{len(group['children'])}` (exhaustive: `{exhaustive}`)",
+            "## Reconciliation Rule",
+            "",
+            f"**{humanize_concept(parent_concept)}** = "
+            + " + ".join(f"({c['weight']:+d}) × **{humanize_concept(c['concept'])}**" for c in group["children"]),
+            "",
+            "## Resolution Status",
+            "",
+            f"- Components resolved to primary-period facts: `{resolved}/{len(group['children'])}`",
+            f"- Exhaustive subtotal check: `{exhaustive}`",
+            f"- Tolerance basis: `xbrl-decimals`",
+            "",
+            "## Component Facts",
+            "",
+        ]
+        if subtotal_fact is not None:
+            body.append(f"- Subtotal fact: {wiki_link(subtotal_fact.path)}")
+        body.extend(
+            f"- ({child['weight']:+d}) {humanize_concept(child['concept'])}: "
+            + (wiki_link(facts_by_concept_period[(child["concept"], filing.report_date)].path) if (child["concept"], filing.report_date) in facts_by_concept_period else "`not resolved`")
+            for child in group["children"][:24]
+        )
+        if len(group["children"]) > 24:
+            body.append(f"- _{len(group['children']) - 24} additional calculation components are captured in the machine payload._")
+        body += [
+            "",
+            "## Research Checks",
+            "",
+            "- Use this note when a displayed subtotal needs an audit trail.",
+            "- If the rule is not exhaustive, do not treat it as a full financial-statement tie-out.",
         ]
         nodes.append(Node(note_path, constraint_id, "finance.constraint", frontmatter, frontmatter["title"], body, "finokf.constraint", payload))
     return nodes
@@ -1033,14 +1433,37 @@ def build_bundle_node(out: Path, filing: FilingRaw, fact_ids: list[str], fact_lo
         "type": "finokf.bundle_view",
         "id": bundle_id,
         "title": f"{filing.ticker} FY{filing.fiscal_year} {filing.form} bundle",
-        "tags": ["finokf/bundle-view", f"company/{filing.ticker}", f"form/{filing.form}"],
+        "tags": merge_tags(["finokf/bundle-view", f"company/{filing.ticker}", f"form/{filing.form}"], information_tags_for_concepts(fact_lookup[fid].concept_local for fid in fact_ids) or ["information/other"]),
         "edges": edges,
         "backlinks": [],
         "graph": {"out_degree": len(edges), "in_degree": 0, "authoritative": False},
         "finokf": {"entity": filing.ticker, "filing_id": filing.filing_id, "fiscal_year": filing.fiscal_year, "form": filing.form, "report_date": filing.report_date, "fact_count": len(fact_ids), "renderings": ["finokf_compact", "untyped_markdown", "csv", "okf_package"]},
     }
     payload = {"bundle_id": bundle_id, "entity": filing.ticker, "filing_id": filing.filing_id, "facts": fact_ids}
-    body = [f"Bundle view over {wiki_link(filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))} — selects `{len(fact_ids)}` canonical facts, no copies."]
+    key_facts = key_facts_for_filing(filing.filing_id, fact_ids, fact_lookup, limit=24)
+    body = [
+        "## Analyst Summary",
+        "",
+        f"This bundle is the canonical evidence slice for {wiki_link(filing_path(out, filing.ticker, filing.fiscal_year, filing.form, filing.accession))}.",
+        "It points to facts rather than copying them, so the same value has one authoritative note.",
+        "",
+        "## Bundle Snapshot",
+        "",
+        f"- Company: `{filing.ticker}`",
+        f"- Form: `{filing.form}`",
+        f"- Fiscal year: `{filing.fiscal_year}`",
+        f"- Report date: `{filing.report_date}`",
+        f"- Included canonical facts: `{len(fact_ids)}`",
+        "",
+        "## Key Facts In This Bundle",
+        "",
+        *(fact_bullet(out, fact) for fact in key_facts),
+        "",
+        "## How To Use",
+        "",
+        "- Use this note as a chart/data cache boundary for one filing.",
+        "- Traverse into fact notes for exact units, periods, dimensions, and source files.",
+    ]
     return Node(note_path, bundle_id, "finokf.bundle_view", frontmatter, frontmatter["title"], body, "finokf.bundle_view", payload)
 
 
@@ -1052,7 +1475,7 @@ def build_entity_node(out: Path, title: str, ticker: str, cik: str, filings: lis
         "type": "finance.entity",
         "id": f"entity:{ticker}",
         "title": title,
-        "tags": ["finokf/entity", f"company/{ticker}"],
+        "tags": ["finokf/entity", "information/company-overview", f"company/{ticker}"],
         "edges": edges,
         "backlinks": [],
         "graph": {"out_degree": len(edges), "in_degree": 0, "authoritative": True},
@@ -1060,7 +1483,42 @@ def build_entity_node(out: Path, title: str, ticker: str, cik: str, filings: lis
     }
     payload = {"entity_id": f"entity:{ticker}", "ticker": ticker, "cik": cik, "title": title, "filing_count": len(filings), "fact_count": fact_count}
     ordered = sorted(filings, key=lambda f: (f.report_date, f.filing_date), reverse=True)
-    body = [f"Ticker: `{ticker}`  CIK: `{cik}`", f"Captured filings: `{len(filings)}`  Captured facts: `{fact_count}`", "", "## Filings", "", *[f"- {wiki_link(filing_path(out, ticker, f.fiscal_year, f.form, f.accession))} — `{f.form}` filed `{f.filing_date}`" for f in ordered[:40]]]
+    annual = sum(1 for f in filings if f.form.startswith("10-K"))
+    quarterly = sum(1 for f in filings if f.form.startswith("10-Q"))
+    body = [
+        "## Analyst Summary",
+        "",
+        f"**{title}** is represented in the vault as `{ticker}` with SEC CIK `{cik}`.",
+        "Use this company note as the starting point for filing history, period selection, and source traversal.",
+        "",
+        "## Coverage Snapshot",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        f"| Ticker | `{ticker}` |",
+        f"| CIK | `{cik}` |",
+        f"| Captured filings | `{len(filings)}` |",
+        f"| Annual reports | `{annual}` |",
+        f"| Quarterly reports | `{quarterly}` |",
+        f"| Canonical facts | `{fact_count}` |",
+        "",
+        "## Filing Timeline",
+        "",
+        *[
+            f"- {wiki_link(filing_path(out, ticker, f.fiscal_year, f.form, f.accession))} — **{f.form}**, report `{f.report_date}`, filed `{f.filing_date}`"
+            for f in ordered[:40]
+        ],
+    ]
+    if len(ordered) > 40:
+        body.append(f"- _{len(ordered) - 40} older filings are available through the graph and machine payload._")
+    body += [
+        "",
+        "## Research Workflow",
+        "",
+        "- Start with the latest 10-K for business context and audited annual numbers.",
+        "- Use the latest 10-Q for recent period updates.",
+        "- Open filing notes to see key reported facts and source files.",
+    ]
     return Node(note_path, f"entity:{ticker}", "finance.entity", frontmatter, title, body, "finokf.entity", payload)
 
 
@@ -1091,15 +1549,23 @@ def convert_company(company_dir: Path, out: Path, forms: set[str], max_source_ch
 
     for filing in filings:
         source_nodes: list[Node] = []
-        for raw_file in sorted(p for p in filing.raw_folder.iterdir() if p.is_file()):
-            if raw_file.name in SKIP_SOURCE_FILES or any(p.search(raw_file.name) for p in SKIP_SOURCE_PATTERNS):
-                continue
+        for raw_file in retained_source_files(filing):
             is_primary = raw_file.name == filing.primary_document
             source_nodes.append(build_source_node(out, filing, raw_file, is_primary, max_source_chars))
         nodes.extend(source_nodes)
         nodes.append(build_filing_node(out, filing, source_nodes, filing_fact_ids[filing.filing_id], fact_lookup))
         nodes.extend(build_constraint_nodes(out, filing, facts_by_concept_period))
         nodes.append(build_bundle_node(out, filing, filing_fact_ids[filing.filing_id], fact_lookup))
+
+    # A rerun should also remove previously generated notes for empty/supporting XML
+    # from the filings being rebuilt. Leave any other company or accession untouched.
+    source_dir = out / "sources"
+    retained_paths = {node.path for node in nodes if node.node_type == "finance.source"}
+    processed_accessions = {filing.accession for filing in filings}
+    if source_dir.exists():
+        for old_note in source_dir.glob(f"{safe_name(ticker)}-source-*.md"):
+            if any(f"-{accession}-" in old_note.name for accession in processed_accessions) and old_note not in retained_paths:
+                old_note.unlink()
 
     for fact in facts:
         nodes.append(build_fact_node(out, fact, filing_lookup))
@@ -1113,12 +1579,149 @@ def convert_company(company_dir: Path, out: Path, forms: set[str], max_source_ch
     return nodes, id_map, None
 
 
-def write_indexes(out: Path, id_map: dict[str, str], graph_rows: list[dict[str, Any]], forms: list[str]) -> None:
+def write_flashokf_company_index(out: Path, nodes: list[Node]) -> dict[str, Any] | None:
+    """Write the compact fact-binding cache used by the low-latency query path.
+
+    One file per ticker avoids loading the complete S&P 100 corpus into memory.
+    It stores values and provenance pointers, not a second copy of Markdown.
+    """
+    fact_nodes = [node for node in nodes if node.node_type == "finance.fact"]
+    if not fact_nodes:
+        return None
+    ticker = str(fact_nodes[0].payload.get("entity") or "").upper()
+    if not ticker:
+        return None
+
+    bindings: list[dict[str, Any]] = []
+    role_counts: dict[str, int] = {}
+    for node in fact_nodes:
+        payload = node.payload
+        roles = flashokf_roles(str(payload.get("concept", "")))
+        if not roles:
+            continue
+        for role in roles:
+            role_counts[role] = role_counts.get(role, 0) + 1
+        period = payload.get("period") or {}
+        bindings.append(
+            {
+                "id": payload.get("fact_id") or node.node_id,
+                "roles": roles,
+                "concept": payload.get("concept"),
+                "value": payload.get("value"),
+                "scale": payload.get("scale", "1"),
+                "unit": payload.get("unit"),
+                "currency": payload.get("currency"),
+                "decimals": payload.get("decimals"),
+                "period": {
+                    key: period.get(key)
+                    for key in ("start", "end", "kind", "fiscal_year", "fiscal_period")
+                },
+                "dimensions": payload.get("dimensions") or {},
+                "accession": (payload.get("provenance") or {}).get("accession"),
+                "path": str(node.path.relative_to(out)),
+                "content_hash": (node.frontmatter.get("graph") or {}).get("content_hash"),
+            }
+        )
+
+    bindings.sort(
+        key=lambda fact: (
+            str((fact.get("period") or {}).get("end") or ""),
+            str(fact.get("concept") or ""),
+            str(fact.get("id") or ""),
+        ),
+        reverse=True,
+    )
+    payload = {
+        "schema_version": "flashokf-bindings/1.0",
+        "ticker": ticker,
+        "fact_count": len(bindings),
+        "roles": role_counts,
+        "facts": bindings,
+    }
+    index_dir = out / "_index" / "flashokf"
+    index_dir.mkdir(parents=True, exist_ok=True)
+    target = index_dir / f"{safe_name(ticker)}.json"
+    target.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    return {
+        "ticker": ticker,
+        "path": str(target.relative_to(out)),
+        "fact_count": len(bindings),
+        "roles": sorted(role_counts),
+        "bytes": target.stat().st_size,
+    }
+
+
+def write_indexes(
+    out: Path,
+    id_map: dict[str, str],
+    graph_rows: list[dict[str, Any]],
+    forms: list[str],
+    flashokf_companies: list[dict[str, Any]],
+) -> None:
     index_dir = out / "_index"
     index_dir.mkdir(parents=True, exist_ok=True)
     (index_dir / "id-map.json").write_text(json.dumps(id_map, indent=2, sort_keys=True), encoding="utf-8")
     (index_dir / "graph.json").write_text(json.dumps(graph_rows, indent=2), encoding="utf-8")
-    (index_dir / "build.json").write_text(json.dumps({"schema_version": SCHEMA_VERSION, "source": "data/raw", "forms": forms, "node_count": len(graph_rows)}, indent=2), encoding="utf-8")
+    (index_dir / "build.json").write_text(json.dumps({"schema_version": SCHEMA_VERSION, "source": str(DATA_ROOT / "raw"), "forms": forms, "node_count": len(graph_rows)}, indent=2), encoding="utf-8")
+    flash_manifest = {
+        "schema_version": "flashokf-bindings/1.0",
+        "description": "Per-company fact bindings for compiled, provenance-preserving cache queries.",
+        "company_count": len(flashokf_companies),
+        "fact_count": sum(int(item.get("fact_count", 0)) for item in flashokf_companies),
+        "companies": sorted(flashokf_companies, key=lambda item: item["ticker"]),
+    }
+    (index_dir / "flashokf-manifest.json").write_text(json.dumps(flash_manifest, indent=2), encoding="utf-8")
+
+
+def scan_tag_usage(output_dir: Path) -> dict[str, dict[str, Any]]:
+    """Read tags back from all Markdown frontmatter, including older notes retained on reruns."""
+    usage: dict[str, dict[str, Any]] = {}
+    for note_path in output_dir.rglob("*.md"):
+        try:
+            lines = note_path.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        if not lines or lines[0].strip() != "---":
+            continue
+        note_type = "unknown"
+        tags: list[str] = []
+        in_tags = False
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            if line.startswith("type:"):
+                note_type = line.split(":", 1)[1].strip().strip('"')
+                in_tags = False
+            elif line.startswith("tags:"):
+                in_tags = True
+            elif in_tags and re.match(r"^\s+-\s+", line):
+                tag = re.sub(r"^\s+-\s+", "", line).strip().strip('"')
+                if tag:
+                    tags.append(tag)
+            elif line and not line.startswith(" "):
+                in_tags = False
+        for tag in tags:
+            entry = usage.setdefault(tag, {"count": 0, "note_types": set()})
+            entry["count"] += 1
+            entry["note_types"].add(note_type)
+    return usage
+
+
+def write_tag_catalog(path: Path, output_dir: Path) -> None:
+    """Write one deterministic inventory of every tag used in the complete Markdown vault."""
+    tag_usage = scan_tag_usage(output_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tags = []
+    for tag in sorted(tag_usage):
+        entry = tag_usage[tag]
+        tags.append({"tag": tag, "count": entry["count"], "note_types": sorted(entry["note_types"])})
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "source": str(output_dir),
+        "tag_count": len(tags),
+        "tags": tags,
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def main() -> int:
@@ -1137,7 +1740,9 @@ def main() -> int:
 
     id_map: dict[str, str] = {}
     graph_rows: list[dict[str, Any]] = []
+    tag_usage: dict[str, dict[str, Any]] = {}
     skipped: list[dict[str, str]] = []
+    flashokf_companies: list[dict[str, Any]] = []
 
     for index, company_dir in enumerate(company_dirs, start=1):
         print(f"[{index:03d}/{len(company_dirs):03d}] {company_dir.name}", flush=True)
@@ -1153,9 +1758,18 @@ def main() -> int:
             continue
         id_map.update(company_ids)
         graph_rows.extend({"id": n.node_id, "type": n.node_type, "path": str(n.path.relative_to(out))} for n in nodes)
+        flashokf_company = write_flashokf_company_index(out, nodes)
+        if flashokf_company:
+            flashokf_companies.append(flashokf_company)
+        for node in nodes:
+            for tag in node.frontmatter.get("tags", []):
+                usage = tag_usage.setdefault(str(tag), {"count": 0, "note_types": set()})
+                usage["count"] += 1
+                usage["note_types"].add(node.node_type)
         print(f"    -> {len(nodes)} notes", flush=True)
 
-    write_indexes(out, id_map, graph_rows, args.forms)
+    write_indexes(out, id_map, graph_rows, args.forms, flashokf_companies)
+    write_tag_catalog(Path(args.tag_catalog), out)
     if skipped:
         (out / "skipped_companies.json").write_text(json.dumps(skipped, indent=2), encoding="utf-8")
         print(f"\nSkipped {len(skipped)} companies. See {out / 'skipped_companies.json'}")

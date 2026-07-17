@@ -67,12 +67,51 @@
       </section>
 
       <aside class="chat-panel" aria-label="Research chat">
-        <div class="chat-head">Research assistant</div>
+        <div class="chat-head">
+          <div class="chat-head-copy">
+            <div class="chat-head-title">Research assistant</div>
+            <div class="active-vault-label">Local clearbox cache</div>
+          </div>
+          <div class="chat-head-actions">
+            <select id="methodSelect" class="method-select" aria-label="Answer method" title="Answer method">
+              <option value="proposed">FlashOKF</option>
+              <option value="naive">Naïve LLM</option>
+            </select>
+            <button id="newChatButton" class="chat-head-btn" type="button" aria-label="Start new chat" title="New chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <section id="vaultInspector" class="vault-inspector" hidden aria-label="Clearbox cache vault">
+          <div class="vault-inspector-head">
+            <div>
+              <div class="vault-kicker">Clearbox cache vault</div>
+              <div id="vaultTitle" class="vault-title">No answer cached yet</div>
+            </div>
+            <div id="vaultSkill" class="vault-skill"></div>
+          </div>
+          <div id="vaultChain" class="vault-chain"></div>
+          <div id="vaultMetrics" class="vault-metrics"></div>
+        </section>
         <div id="chatMessages" class="chat-messages"></div>
         <form id="chatForm" class="chat-form">
           <input id="chatInput" type="text" autocomplete="off" placeholder="Ask about the selected note" />
           <button type="submit">Ask</button>
         </form>
+        <div class="vault-switcher-dock">
+          <button id="historyButton" class="vault-switcher-button" type="button" aria-label="Switch vault" aria-expanded="false">
+            <span class="vault-switcher-chevrons" aria-hidden="true">⌃<br />⌄</span>
+            <span id="activeVaultLabel" class="vault-switcher-name">Knowledge graph</span>
+            <span class="vault-switcher-gear" aria-hidden="true">⚙</span>
+          </button>
+          <section id="vaultHistoryPanel" class="vault-history-panel" hidden aria-label="Vault switcher">
+            <div class="vault-history-title">Vaults</div>
+            <div id="vaultHistoryList" class="vault-history-list"></div>
+            <div class="vault-history-manage">Manage vaults…</div>
+          </section>
+        </div>
       </aside>
     </main>
     <script src="./app.js"></script>

@@ -5,18 +5,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 
 TYPE_DIRS = ("entities", "filings", "bundles", "facts", "constraints", "sources")
+DATA_ROOT = Path(os.environ.get("FINOKF_DATA_ROOT", "data"))
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build ui/vault-index.json from data/processed.")
-    parser.add_argument("--processed-dir", default="data/processed", help="Processed Markdown vault folder.")
+    parser = argparse.ArgumentParser(description="Build ui/vault-index.json from the processed Markdown vault.")
+    parser.add_argument("--processed-dir", default=str(DATA_ROOT / "processed"), help="Processed Markdown vault folder.")
     parser.add_argument("--output", default="ui/vault-index.json", help="Output JSON index path.")
     parser.add_argument(
         "--fact-limit-per-company",
@@ -156,6 +158,11 @@ def ticker_from_path(path: Path) -> str:
     return "UNKNOWN"
 
 
+def fiscal_year_from_path(path: Path) -> str:
+    match = re.search(r"(?:^|[-_])FY(\d{4})(?:[-_]|$)", path.name)
+    return match.group(1) if match else "unknown"
+
+
 def is_high_value_source(path: Path) -> bool:
     name = path.name.lower()
     return (
@@ -166,6 +173,34 @@ def is_high_value_source(path: Path) -> bool:
     )
 
 
+def take_balanced_by_year(paths: list[Path], limit_per_company: int) -> list[Path]:
+    if limit_per_company <= 0:
+        return []
+
+    by_company_year: dict[str, dict[str, list[Path]]] = defaultdict(lambda: defaultdict(list))
+    for path in sorted(paths):
+        by_company_year[ticker_from_path(path)][fiscal_year_from_path(path)].append(path)
+
+    selected: list[Path] = []
+    for _ticker, by_year in sorted(by_company_year.items()):
+        kept = 0
+        years = sorted(by_year)
+        while kept < limit_per_company:
+            added = False
+            for year in years:
+                bucket = by_year[year]
+                if not bucket:
+                    continue
+                selected.append(bucket.pop(0))
+                kept += 1
+                added = True
+                if kept >= limit_per_company:
+                    break
+            if not added:
+                break
+    return selected
+
+
 def collect_files(
     processed_dir: Path,
     fact_limit_per_company: int,
@@ -174,11 +209,20 @@ def collect_files(
 ) -> list[Path]:
     files: list[Path] = []
     fact_counts: Counter[str] = Counter()
-    source_counts: Counter[str] = Counter()
-    constraint_counts: Counter[str] = Counter()
     for dirname in TYPE_DIRS:
         folder = processed_dir / dirname
         if not folder.exists():
+            continue
+        if dirname == "sources":
+            files.extend(
+                take_balanced_by_year(
+                    [path for path in folder.glob("*.md") if is_high_value_source(path)],
+                    source_limit_per_company,
+                )
+            )
+            continue
+        if dirname == "constraints":
+            files.extend(take_balanced_by_year(list(folder.glob("*.md")), constraint_limit_per_company))
             continue
         for path in sorted(folder.glob("*.md")):
             ticker = ticker_from_path(path)
@@ -186,16 +230,6 @@ def collect_files(
                 if fact_counts[ticker] >= fact_limit_per_company:
                     continue
                 fact_counts[ticker] += 1
-            elif dirname == "sources":
-                if not is_high_value_source(path):
-                    continue
-                if source_counts[ticker] >= source_limit_per_company:
-                    continue
-                source_counts[ticker] += 1
-            elif dirname == "constraints":
-                if constraint_counts[ticker] >= constraint_limit_per_company:
-                    continue
-                constraint_counts[ticker] += 1
             files.append(path)
     return files
 

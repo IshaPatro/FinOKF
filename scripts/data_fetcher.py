@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download SEC EDGAR data and source filing documents for an S&P 100 snapshot.
+Download SEC EDGAR data and source filing documents for an S&P 100 company universe.
 
 For each company, this saves:
 - companyfacts/companyfacts.json
@@ -13,10 +13,8 @@ The main annual/quarterly report is commonly the primary `.htm` filing document.
 By default, this script skips SEC-rendered `R*.htm` report fragments and ordinary exhibits because
 they duplicate or distract from the equity-research source layer.
 
-The S&P 100 membership here is a checked snapshot, not a live index feed:
-- Source checked: Wikipedia S&P 100 constituents table
-- Constituents table as-of date on the page: 2025-09-22
-- Snapshot checked on: 2026-07-10
+By default, the company universe comes from the current S&P 100 constituents table and is
+resolved against the SEC's published `company_tickers_exchange.json` file.
 """
 
 from __future__ import annotations
@@ -31,32 +29,22 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-SP100_SNAPSHOT = [
-    "AAPL", "ABBV", "ABT", "ACN", "ADBE", "AMAT", "AMD", "AMGN", "AMT", "AMZN",
-    "AVGO", "AXP", "BA", "BAC", "BK", "BKNG", "BLK", "BMY", "BRK.B", "C",
-    "CAT", "CL", "CMCSA", "COF", "COP", "COST", "CRM", "CSCO", "CVS", "CVX",
-    "DE", "DHR", "DIS", "DUK", "EMR", "FDX", "GD", "GE", "GEV", "GILD",
-    "GM", "GOOG", "GOOGL", "GS", "HD", "HONA", "IBM", "INTC", "INTU", "ISRG",
-    "JNJ", "JPM", "KO", "LIN", "LLY", "LMT", "LOW", "LRCX", "MA", "MCD",
-    "MDLZ", "MDT", "META", "MMM", "MO", "MRK", "MS", "MSFT", "MU", "NEE",
-    "NFLX", "NKE", "NOW", "NVDA", "ORCL", "PEP", "PFE", "PG", "PLTR", "PM",
-    "QCOM", "RTX", "SBUX", "SCHW", "SO", "SPG", "T", "TMO", "TMUS", "TSLA",
-    "TXN", "UBER", "UNH", "UNP", "UPS", "USB", "V", "VZ", "WFC", "WMT",
-    "XOM",
-]
-
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
+SP100_CONSTITUENTS_URL = "https://en.wikipedia.org/wiki/S%26P_100"
+SP500_CONSTITUENTS_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SUBMISSIONS_HISTORY_URL = "https://data.sec.gov/submissions/{name}"
 ARCHIVE_INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik_num}/{accession_no_dashes}/index.json"
 ARCHIVE_FILE_URL = "https://www.sec.gov/Archives/edgar/data/{cik_num}/{accession_no_dashes}/{name}"
+DATA_ROOT = Path(os.environ.get("FINOKF_DATA_ROOT", "data"))
 
 
 @dataclass(frozen=True)
@@ -84,6 +72,51 @@ class DownloadTask:
     destination: Path
 
 
+class TableParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tables: list[list[list[str]]] = []
+        self._in_table = False
+        self._in_row = False
+        self._in_cell = False
+        self._skip_depth = 0
+        self._current_table: list[list[str]] = []
+        self._current_row: list[str] = []
+        self._current_cell: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"sup", "style", "script"}:
+            self._skip_depth += 1
+        elif tag == "table":
+            self._in_table = True
+            self._current_table = []
+        elif self._in_table and tag == "tr":
+            self._in_row = True
+            self._current_row = []
+        elif self._in_row and tag in {"th", "td"}:
+            self._in_cell = True
+            self._current_cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_cell and self._skip_depth == 0:
+            self._current_cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"sup", "style", "script"} and self._skip_depth:
+            self._skip_depth -= 1
+        elif tag in {"th", "td"} and self._in_cell:
+            self._current_row.append(" ".join("".join(self._current_cell).split()))
+            self._in_cell = False
+        elif tag == "tr" and self._in_row:
+            if self._current_row:
+                self._current_table.append(self._current_row)
+            self._in_row = False
+        elif tag == "table" and self._in_table:
+            if self._current_table:
+                self.tables.append(self._current_table)
+            self._in_table = False
+
+
 class RateLimiter:
     """Thread-safe global rate limiter shared by all SEC requests."""
 
@@ -105,7 +138,7 @@ class RateLimiter:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Download SEC JSON feeds and 10-K/10-Q filing documents for an S&P 100 snapshot."
+        description="Download SEC JSON feeds and 10-K/10-Q filing documents for S&P 100 companies."
     )
     parser.add_argument(
         "--user-agent",
@@ -115,8 +148,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default="data/raw/sp100_sec_core",
+        default=str(DATA_ROOT / "raw" / "sp100_sec_core"),
         help="Base output directory.",
+    )
+    parser.add_argument(
+        "--universe",
+        choices=["sp100", "sp500", "all-listed"],
+        default="sp100",
+        help="Company universe to download when --tickers is not supplied.",
     )
     parser.add_argument(
         "--filing-years",
@@ -141,7 +180,7 @@ def parse_args() -> argparse.Namespace:
         "--tickers",
         nargs="+",
         default=None,
-        help="Only process these specific tickers, e.g. --tickers AAPL MSFT.",
+        help="Only process these specific tickers, e.g. --tickers AAPL MSFT. Overrides --universe.",
     )
     parser.add_argument(
         "--max-requests-per-second",
@@ -286,6 +325,45 @@ def load_sec_ticker_map(
     return ticker_map
 
 
+def fetch_constituent_tickers(
+    url: str,
+    index_name: str,
+    user_agent: str,
+    timeout: float,
+    retries: int,
+    limiter: RateLimiter,
+) -> list[str]:
+    html_text = sec_request(url, user_agent, timeout, retries, limiter).decode(
+        "utf-8",
+        errors="replace",
+    )
+    parser = TableParser()
+    parser.feed(html_text)
+    for table in parser.tables:
+        if not table:
+            continue
+        header = table[0]
+        if "Symbol" not in header:
+            continue
+        symbol_index = header.index("Symbol")
+        tickers = [
+            row[symbol_index].replace(".", "-")
+            for row in table[1:]
+            if len(row) > symbol_index and row[symbol_index]
+        ]
+        if tickers:
+            return tickers
+    raise RuntimeError(f"Could not find the {index_name} constituents table.")
+
+
+def fetch_sp100_tickers(user_agent: str, timeout: float, retries: int, limiter: RateLimiter) -> list[str]:
+    return fetch_constituent_tickers(SP100_CONSTITUENTS_URL, "S&P 100", user_agent, timeout, retries, limiter)
+
+
+def fetch_sp500_tickers(user_agent: str, timeout: float, retries: int, limiter: RateLimiter) -> list[str]:
+    return fetch_constituent_tickers(SP500_CONSTITUENTS_URL, "S&P 500", user_agent, timeout, retries, limiter)
+
+
 def resolve_companies(ticker_map: dict[str, Company], wanted_tickers: list[str]) -> tuple[list[Company], list[str]]:
     companies: list[Company] = []
     missing: list[str] = []
@@ -304,6 +382,10 @@ def resolve_companies(ticker_map: dict[str, Company], wanted_tickers: list[str])
             )
         )
     return companies, missing
+
+
+def all_companies_from_map(ticker_map: dict[str, Company]) -> list[Company]:
+    return sorted(ticker_map.values(), key=lambda company: (company.exchange, company.sec_ticker, company.cik))
 
 
 def extract_filings(payload: dict, target_years: set[int], forms: set[str]) -> list[Filing]:
@@ -623,14 +705,31 @@ def main() -> int:
     limiter = RateLimiter(args.max_requests_per_second)
 
     ticker_map = load_sec_ticker_map(args.user_agent, args.timeout, args.retries, limiter)
-    wanted_tickers = args.tickers if args.tickers else SP100_SNAPSHOT
-    companies, unresolved = resolve_companies(ticker_map, wanted_tickers)
+    unresolved: list[str] = []
+    if args.tickers:
+        companies, unresolved = resolve_companies(ticker_map, args.tickers)
+        company_universe = "custom tickers"
+        selected_tickers: str | list[str] = args.tickers
+    elif args.universe == "sp100":
+        sp100_tickers = fetch_sp100_tickers(args.user_agent, args.timeout, args.retries, limiter)
+        companies, unresolved = resolve_companies(ticker_map, sp100_tickers)
+        company_universe = "S&P 100 constituents"
+        selected_tickers = sp100_tickers
+    elif args.universe == "sp500":
+        sp500_tickers = fetch_sp500_tickers(args.user_agent, args.timeout, args.retries, limiter)
+        companies, unresolved = resolve_companies(ticker_map, sp500_tickers)
+        company_universe = "S&P 500 constituents"
+        selected_tickers = sp500_tickers
+    else:
+        companies = all_companies_from_map(ticker_map)
+        company_universe = "SEC company_tickers_exchange.json"
+        selected_tickers = "ALL_LISTED_COMPANIES"
     if args.limit is not None:
         companies = companies[: args.limit]
 
     manifest_rows: list[dict] = []
     missing_items: list[str] = [
-        f"S&P 100 snapshot ticker could not be resolved in SEC ticker map: {ticker}"
+        f"Requested ticker could not be resolved in SEC ticker map: {ticker}"
         for ticker in unresolved
     ]
     target_years = set(args.filing_years)
@@ -666,9 +765,8 @@ def main() -> int:
     write_json(
         output_dir / "snapshot_metadata.json",
         {
-            "snapshot_source": "Wikipedia S&P 100 constituents table",
-            "snapshot_checked_on": "2026-07-10",
-            "snapshot_constituents_as_of": "2025-09-22",
+            "company_universe": company_universe,
+            "selected_tickers": selected_tickers,
             "filing_years": sorted(target_years),
             "forms": sorted(forms),
             "max_requests_per_second": args.max_requests_per_second,
