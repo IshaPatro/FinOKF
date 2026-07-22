@@ -6,7 +6,7 @@ Downloads SEC company facts, submissions, and filing files for S&P 100 companies
 
 ```bash
 export SEC_USER_AGENT="Your Name your.email@example.com"
-python3 scripts/data_fetcher.py --universe sp100 --output-dir data/raw/sp100_sec_core --filing-years 2020 2021 2022 2023 2024 2025 2026 --forms 10-K 10-K/A 10-Q 10-Q/A --workers 6 --max-requests-per-second 8
+python3 scripts/data_fetcher.py --universe sp100 --output-dir data/raw/sp100_sec_core --filing-years 2020 2021 2022 2023 2024 2025 2026 --forms 10-K 10-K/A 10-Q 10-Q/A 8-K DEF 14A --workers 6 --max-requests-per-second 8
 ```
 
 ## Price layer
