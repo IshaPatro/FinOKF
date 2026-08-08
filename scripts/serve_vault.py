@@ -442,7 +442,7 @@ def compile_flashokf(question: str, ticker: str) -> dict:
 def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
     request_payload = {
         "model": LLM_MODEL,
-        "stream": True,
+        "stream": False,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
