@@ -386,6 +386,74 @@ button { border: 0; }
   color: var(--muted);
 }
 
+/* filing-only YAML reader */
+.markdown-rendered:has(.structured-document) { max-width: none; }
+.structured-properties {
+  margin: 0.9em 0 1.5em;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.property-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px 18px;
+}
+.property-item { min-width: 0; }
+.property-item span {
+  display: block;
+  color: var(--quiet);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.property-item strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.property-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.property-tags span {
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--accent-2);
+  font-size: 11px;
+}
+.structured-document h2 { display: flex; align-items: baseline; gap: 8px; }
+.structured-document h2 small { color: var(--quiet); font-size: 11px; font-weight: 500; }
+.structured-table-wrap {
+  width: 100%;
+  max-height: 540px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.markdown-rendered .structured-table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
+.structured-table thead { position: sticky; top: 0; z-index: 1; }
+.structured-table th { white-space: nowrap; }
+.structured-table td { max-width: 360px; font-family: var(--mono); font-size: 11.5px; vertical-align: top; }
+.structured-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+.empty-table { color: var(--quiet); font-style: italic; }
+.filing-text {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.filing-text summary { cursor: pointer; padding: 10px 14px; color: var(--muted); }
+.markdown-rendered .filing-text pre { max-height: 620px; margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; white-space: pre-wrap; }
+
 /* ---- chat panel ---- */
 .chat-panel {
   min-height: 0;

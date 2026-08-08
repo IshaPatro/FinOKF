@@ -28,7 +28,7 @@ python3 scripts/download_fred_macro.py --output-dir data/macro/fred --start 2020
 
 ## Markdown vault (corpus layer)
 
-Converts SEC data into Markdown and builds per-company FlashOKF fact bindings for low-latency, provenance-preserving queries. It also writes the complete tag inventory to `data/unique-tags.json`.
+Converts SEC data into Markdown and builds per-company FinOKF fact bindings for low-latency, provenance-preserving queries. It also writes the complete tag inventory to `data/unique-tags.json`.
 
 ```bash
 python3 scripts/convert_raw_sec_to_markdown_vault.py --input-dir data/raw/sp100_sec_core --output-dir data/processed

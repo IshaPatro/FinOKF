@@ -1101,6 +1101,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if path == "/ui/vault-index.json" and INDEX_PATH != ROOT / "ui" / "vault-index.json":
+            try:
+                data = INDEX_PATH.read_bytes()
+            except OSError as exc:
+                self.send_error(404, str(exc))
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path == "/api/vaults":
             self._json(
                 200,
@@ -1147,8 +1159,8 @@ class Handler(SimpleHTTPRequestHandler):
         if target != PROCESSED and PROCESSED not in target.parents:
             self._json(403, {"ok": False, "error": "path outside vault"})
             return
-        if target.suffix != ".md":
-            self._json(403, {"ok": False, "error": "only .md files are editable"})
+        if target.suffix.lower() not in {".md", ".yml", ".yaml"}:
+            self._json(403, {"ok": False, "error": "only filing Markdown/YAML files are editable"})
             return
         if not target.exists():
             self._json(404, {"ok": False, "error": "file not found"})
@@ -1340,9 +1352,10 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    global LLM_ENABLED, LLM_MODEL, LLM_TIMEOUT, LLM_URL, PROCESSED, VAULTS
+    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_TIMEOUT, LLM_URL, PROCESSED, VAULTS
     parser = argparse.ArgumentParser(description="Serve the FinOKF vault viewer with markdown saving.")
     parser.add_argument("--processed-dir", default=str(DATA_ROOT / "processed"), help="Processed vault directory.")
+    parser.add_argument("--index", default="ui/vault-index.json", help="Browser index JSON path.")
     parser.add_argument("--vaults-dir", default=str(DATA_ROOT / "vaults" / "answers"), help="Answer vault directory.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8770)
@@ -1358,6 +1371,7 @@ def main() -> int:
     args = parser.parse_args()
 
     PROCESSED = (ROOT / args.processed_dir).resolve()
+    INDEX_PATH = (ROOT / args.index).resolve()
     VAULTS = (ROOT / args.vaults_dir).resolve()
     VAULTS.mkdir(parents=True, exist_ok=True)
     LLM_URL = args.llm_url

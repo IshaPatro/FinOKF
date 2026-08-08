@@ -1,32 +1,10 @@
 #!/usr/bin/env python3
-"""
-Convert downloaded SEC raw filings into the FinOKF Markdown vault (corpus layer).
+"""Build a compact SEC filing vault with exactly one visible file per filing.
 
-Unlike a companyfacts-based converter, this reads the **filed XBRL instance** and the
-**calculation linkbase** of every filing, which is the authoritative source the thesis requires
-(implementation.md §2.2 / §2.3): it alone carries the `decimals` attribute, units, context
-periods, segment/member dimensions, and company-specific extension concepts. Nothing about the
-numeric filing is left behind — every numeric fact becomes a typed, deduplicated fact note with a
-full rounding envelope, and every summation relation in the calculation linkbase becomes a
-constraint note.
-
-Layers produced under --output-dir (see docs/markdown-vault-format.md):
-
-    _index/            id-map.json, graph.json, build.json
-    entities/          one finance.entity note per company
-    filings/           one finance.filing note per (company, form, year, accession)
-    facts/             canonical, period-addressed, deduplicated finance.fact notes
-    constraints/       finance.constraint notes from the calculation linkbase
-    sources/           finance.source notes (pointer + hash; full text for the primary document)
-    bundles/           finokf.bundle_view selection notes, one per filing
-
-Answer-local vaults (certifacts.*) are NOT built here: they need model outputs and CertiFacts
-claims. This script only materializes the corpus and bundle-view layers.
-
-Every fact node is deduplicated across filings by its intrinsic identity
-(entity, concept, period, unit, dimensions). A prior-year comparative reported again in a later
-10-K is stored once, with a `reported_in` edge per filing tagged primary/comparative, and the
-winning accession recorded in provenance (implementation.md §2.2).
+Annual and quarterly reports are written as YAML because their XBRL facts and
+calculation relationships are structured evidence. Narrative forms such as 8-K
+and DEF 14A are written as Markdown. Raw SEC XML remains in the input directory
+only long enough to be parsed; it is never copied into the processed vault.
 """
 
 from __future__ import annotations
@@ -37,6 +15,7 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -45,7 +24,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCHEMA_VERSION = "finokf-vault/1.0"
+SCHEMA_VERSION = "finokf-filing/2.0"
 DATA_ROOT = Path(os.environ.get("FINOKF_DATA_ROOT", "data"))
 
 # Namespace hosts that indicate a STANDARD taxonomy (anything else is a filer extension).
@@ -121,15 +100,15 @@ INFORMATION_TAG_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Arguments
 # --------------------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert raw SEC XBRL filings into Markdown vault notes.")
+    parser = argparse.ArgumentParser(description="Convert raw SEC filings into one YAML or Markdown file per filing.")
     parser.add_argument("--input-dir", default=str(DATA_ROOT / "raw" / "sp100_sec_core"), help="Raw SEC download directory.")
-    parser.add_argument("--output-dir", default=str(DATA_ROOT / "processed"), help="Markdown vault output directory.")
+    parser.add_argument("--output-dir", default=str(DATA_ROOT / "processed"), help="Compact filing vault output directory.")
     parser.add_argument("--tickers", nargs="+", default=None, help="Only convert these tickers, e.g. AAPL MSFT.")
     parser.add_argument("--limit", type=int, default=None, help="Only convert the first N companies.")
     parser.add_argument(
         "--forms",
         nargs="+",
-        default=["10-K", "10-K/A", "10-Q", "10-Q/A"],
+        default=["10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A", "DEF 14A", "DEF 14A/A"],
         help="Filing form types to convert.",
     )
     parser.add_argument(
@@ -141,7 +120,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tag-catalog",
         default=str(DATA_ROOT / "unique-tags.json"),
-        help="Path for the generated catalog of every tag used in the Markdown vault.",
+        help="Path for the generated catalog of every tag used in the filing vault.",
+    )
+    parser.add_argument(
+        "--filing-limit-per-company",
+        type=int,
+        default=None,
+        help="Optional smoke-test cap; newest filings are processed first.",
+    )
+    parser.add_argument(
+        "--clean-output",
+        action="store_true",
+        help="Remove the old generated node layout before rebuilding the filing-only vault.",
     )
     return parser.parse_args()
 
@@ -300,9 +290,9 @@ def yaml_scalar(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     text = str(value)
-    if text == "" or text != text.strip() or re.search(r"""[:#\-\{\}\[\],&\*!\|>'"%@`]""", text):
-        return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
-    return text
+    # Strings are always quoted so accessions, dates, large integer values, and
+    # taxonomy identifiers survive YAML readers without implicit type changes.
+    return json.dumps(text, ensure_ascii=False)
 
 
 def dump_yaml(data: Any, indent: int = 0) -> list[str]:
@@ -322,6 +312,9 @@ def dump_yaml(data: Any, indent: int = 0) -> list[str]:
                 lines.extend(dump_yaml(value, indent + 2))
             elif isinstance(value, list):
                 lines.append(f"{pad}{key}: []")
+            elif isinstance(value, str) and "\n" in value:
+                lines.append(f"{pad}{key}: |-" )
+                lines.extend(f"{' ' * (indent + 2)}{line}" if line else " " * (indent + 2) for line in value.splitlines())
             else:
                 lines.append(f"{pad}{key}: {yaml_scalar(value)}")
     elif isinstance(data, list):
@@ -476,10 +469,24 @@ class RawFact:
 
 
 @dataclass
+class RawTextFact:
+    concept_local: str
+    namespace: str
+    concept_uri: str
+    is_extension: bool
+    context_id: str
+    element_id: str | None
+    language: str | None
+    lexical: str
+    is_nil: bool
+
+
+@dataclass
 class ParsedInstance:
     contexts: dict[str, XbrlContext]
     units: dict[str, XbrlUnit]
     facts: list[RawFact]
+    text_facts: list[RawTextFact]
 
 
 def parse_contexts(root: ET.Element) -> dict[str, XbrlContext]:
@@ -564,9 +571,40 @@ def parse_facts(root: ET.Element, uri_to_prefix: dict[str, str]) -> list[RawFact
     return facts
 
 
+def parse_text_facts(root: ET.Element, uri_to_prefix: dict[str, str]) -> list[RawTextFact]:
+    facts: list[RawTextFact] = []
+    for elem in root:
+        context_id = elem.get("contextRef")
+        if not context_id or elem.get("unitRef"):
+            continue
+        uri = ns_uri(elem.tag)
+        prefix = uri_to_prefix.get(uri, "") or "x"
+        lexical = "".join(elem.itertext()).strip()
+        is_nil = elem.get("{http://www.w3.org/2001/XMLSchema-instance}nil", "").lower() == "true"
+        facts.append(
+            RawTextFact(
+                concept_local=local_name(elem.tag),
+                namespace=prefix,
+                concept_uri=uri,
+                is_extension=not any(host in uri for host in STANDARD_NS_HOSTS),
+                context_id=context_id,
+                element_id=elem.get("id"),
+                language=elem.get("{http://www.w3.org/XML/1998/namespace}lang"),
+                lexical=lexical,
+                is_nil=is_nil,
+            )
+        )
+    return facts
+
+
 def parse_instance(path: Path) -> ParsedInstance:
     root, uri_to_prefix = load_xml(path)
-    return ParsedInstance(parse_contexts(root), parse_units(root), parse_facts(root, uri_to_prefix))
+    return ParsedInstance(
+        parse_contexts(root),
+        parse_units(root),
+        parse_facts(root, uri_to_prefix),
+        parse_text_facts(root, uri_to_prefix),
+    )
 
 
 def parse_calculation(path: Path) -> list[dict[str, Any]]:
@@ -1724,56 +1762,842 @@ def write_tag_catalog(path: Path, output_dir: Path) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+STRUCTURED_FORM_PREFIXES = ("10-K", "10-Q")
+LEGACY_OUTPUT_DIRS = ("entities", "bundles", "facts", "constraints", "sources")
+
+
+def is_structured_filing(filing: FilingRaw) -> bool:
+    return filing.form.upper().startswith(STRUCTURED_FORM_PREFIXES) and filing.instance_path is not None
+
+
+def filing_only_path(out: Path, filing: FilingRaw, structured: bool) -> Path:
+    suffix = ".yml" if structured else ".md"
+    filename = (
+        f"{safe_name(filing.ticker)}-FY{filing.fiscal_year}-{safe_name(filing.form)}-"
+        f"{safe_name(filing.report_date or filing.filing_date)}-{safe_name(filing.accession)}{suffix}"
+    )
+    return out / "filings" / safe_name(filing.ticker) / filename
+
+
+def filing_tags(filing: FilingRaw, concepts: Iterable[str], structured: bool) -> list[str]:
+    kind = "structured" if structured else "narrative"
+    return merge_tags(
+        [
+            "finokf/filing",
+            f"company/{filing.ticker}",
+            f"form/{filing.form}",
+            f"period/FY{filing.fiscal_year}",
+            f"content/{kind}",
+        ],
+        information_tags_for_concepts(concepts) if structured else ["information/filing-text"],
+    )
+
+
+def source_manifest(filing: FilingRaw) -> list[dict[str, Any]]:
+    """Keep provenance for evidence-bearing sources without creating source notes."""
+    manifest: list[dict[str, Any]] = []
+    for source in retained_source_files(filing):
+        if source.name == filing.primary_document:
+            role = "primary_filing_document"
+        elif source == filing.instance_path:
+            role = "xbrl_fact_source"
+        elif source == filing.calc_path:
+            role = "xbrl_calculation_source"
+        else:
+            role = "supporting_source"
+        manifest.append(
+            {
+                "role": role,
+                "file_name": source.name,
+                "raw_path": str(source),
+                "sha256": sha256_file(source),
+                "bytes": source.stat().st_size,
+            }
+        )
+    return manifest
+
+
+def primary_text(filing: FilingRaw, max_chars: int) -> tuple[str, str, bool]:
+    """Extract the human-readable filing once; prefer the SEC primary document."""
+    candidates: list[Path] = []
+    if filing.primary_document:
+        candidates.append(filing.raw_folder / filing.primary_document)
+    candidates.extend(
+        path
+        for path in sorted(filing.raw_folder.iterdir())
+        if path.suffix.lower() in {".htm", ".html"}
+        and "index" not in path.name.lower()
+        and path not in candidates
+    )
+    candidates.extend(path for path in sorted(filing.raw_folder.glob("*.txt")) if path not in candidates)
+
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        text = extract_text(candidate)
+        if not text:
+            continue
+        truncated = bool(max_chars and len(text) > max_chars)
+        if truncated:
+            text = text[:max_chars]
+        return candidate.name, text, truncated
+    return "", "", False
+
+
+def fact_display_value(value: str, scale: str, unit: XbrlUnit) -> str:
+    try:
+        base = Decimal(value) * Decimal(scale)
+        rendered = format_decimal(base)
+    except (InvalidOperation, ValueError):
+        rendered = value
+    return f"${rendered}" if unit.currency == "USD" else f"{rendered} {unit.label}".strip()
+
+
+def new_fact_score(record: dict[str, Any]) -> int:
+    concept = str(record.get("concept", "")).lower().replace("_", "")
+    score = 18 if record.get("reporting_role") == "primary" else 0
+    score += 8 if not record.get("dimensions") else 0
+    score += 8 if str(record.get("concept", "")).startswith(("us-gaap:", "dei:")) else 0
+    keyword_score = 0
+    for index, keyword in enumerate(IMPORTANT_FACT_KEYWORDS):
+        if keyword in concept:
+            keyword_score = max(keyword_score, 100 - index)
+    return score + keyword_score
+
+
+def filing_fact_inventory(filing: FilingRaw) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return every numeric and non-numeric XBRL fact in this accession."""
+    if filing.instance_path is None or not filing.instance_path.exists():
+        return [], []
+    parsed = parse_instance(filing.instance_path)
+    records: list[dict[str, Any]] = []
+    seen: dict[tuple[Any, ...], int] = {}
+
+    for raw in parsed.facts:
+        context = parsed.contexts.get(raw.context_id)
+        unit = parsed.units.get(raw.unit_id)
+        if context is None or unit is None:
+            continue
+        value, scale, normalization_flagged = normalize_value(raw.lexical, raw.decimals)
+        period = {
+            "start": context.start,
+            "end": context.period_end,
+            "kind": context.kind,
+            "context_id": context.context_id,
+            "fiscal_year": int(context.period_end[:4]) if context.period_end else None,
+            "fiscal_period": "FY" if filing.form.startswith("10-K") and context.kind == "duration" else None,
+        }
+        dimensions = dict(sorted(context.dimensions.items()))
+        identity = (
+            raw.namespace,
+            raw.concept_local,
+            period_key(context),
+            unit.label,
+            tuple(dimensions.items()),
+            raw.lexical,
+            raw.decimals,
+        )
+        seen[identity] = seen.get(identity, 0) + 1
+        duplicate = seen[identity]
+        dimension_suffix = f"__{dim_hash(dimensions)}" if dimensions else ""
+        duplicate_suffix = f"__N{duplicate}" if duplicate > 1 else ""
+        fact_id = (
+            f"{filing.ticker}-fact-{safe_name(raw.namespace)}_{safe_name(raw.concept_local)}"
+            f"__{period_key(context)}__U{safe_name(unit.label)}{dimension_suffix}{duplicate_suffix}"
+        )
+        record = {
+            "fact_id": fact_id,
+            "concept": f"{raw.namespace}:{raw.concept_local}",
+            "label": humanize_concept(raw.concept_local),
+            "value": value,
+            "raw_value": raw.lexical,
+            "scale": scale,
+            "display_value": fact_display_value(value, scale, unit),
+            "unit": unit.label,
+            "unit_measures": unit.measures,
+            "currency": unit.currency,
+            "decimals": raw.decimals,
+            "period": period,
+            "dimensions": dimensions,
+            "is_extension": raw.is_extension,
+            "reporting_role": "primary" if context.period_end == filing.report_date else "comparative",
+            "element_id": raw.element_id,
+            "source_role": "xbrl_fact_source",
+            "normalization_flagged": normalization_flagged,
+        }
+        records.append(record)
+
+    key_ids = {
+        record["fact_id"]
+        for record in sorted(records, key=lambda item: (-new_fact_score(item), str(item["fact_id"])))[:24]
+    }
+    for record in records:
+        record["key_fact"] = record["fact_id"] in key_ids
+
+    text_records: list[dict[str, Any]] = []
+    text_seen: dict[tuple[Any, ...], int] = {}
+    for raw in parsed.text_facts:
+        context = parsed.contexts.get(raw.context_id)
+        if context is None:
+            continue
+        dimensions = dict(sorted(context.dimensions.items()))
+        identity = (raw.namespace, raw.concept_local, raw.context_id, raw.lexical, tuple(dimensions.items()))
+        text_seen[identity] = text_seen.get(identity, 0) + 1
+        duplicate = text_seen[identity]
+        dimension_suffix = f"__{dim_hash(dimensions)}" if dimensions else ""
+        duplicate_suffix = f"__N{duplicate}" if duplicate > 1 else ""
+        text_records.append(
+            {
+                "fact_id": (
+                    f"{filing.ticker}-text-fact-{safe_name(raw.namespace)}_{safe_name(raw.concept_local)}"
+                    f"__{period_key(context)}{dimension_suffix}{duplicate_suffix}"
+                ),
+                "concept": f"{raw.namespace}:{raw.concept_local}",
+                "label": humanize_concept(raw.concept_local),
+                "value": raw.lexical,
+                "language": raw.language,
+                "is_nil": raw.is_nil,
+                "period": {
+                    "start": context.start,
+                    "end": context.period_end,
+                    "kind": context.kind,
+                    "context_id": context.context_id,
+                },
+                "dimensions": dimensions,
+                "is_extension": raw.is_extension,
+                "reporting_role": "primary" if context.period_end == filing.report_date else "comparative",
+                "element_id": raw.element_id,
+                "source_role": "xbrl_fact_source",
+            }
+        )
+    return records, text_records
+
+
+def filing_calculations(filing: FilingRaw) -> list[dict[str, Any]]:
+    """Flatten every XBRL calculation arc into a table-friendly record."""
+    if filing.calc_path is None or not filing.calc_path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for group in parse_calculation(filing.calc_path):
+        for child in group["children"]:
+            rows.append(
+                {
+                    "statement_role": group["role"],
+                    "subtotal_concept": group["parent"],
+                    "component_concept": child["concept"],
+                    "weight": child["weight"],
+                    "order": child["order"],
+                }
+            )
+    return rows
+
+
+def write_structured_filing(
+    out: Path,
+    company_title: str,
+    filing: FilingRaw,
+    facts: list[dict[str, Any]],
+    text_facts: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    sources: list[dict[str, Any]],
+    graph_connections: list[dict[str, Any]],
+    max_source_chars: int,
+) -> tuple[Path, list[str]]:
+    target = filing_only_path(out, filing, structured=True)
+    source_name, text, text_truncated = primary_text(filing, max_source_chars)
+    tags = filing_tags(
+        filing,
+        [str(fact["concept"]) for fact in facts] + [str(fact["concept"]) for fact in text_facts],
+        structured=True,
+    )
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "type": "finance.filing",
+        "id": filing.filing_id,
+        "title": f"{filing.ticker} FY{filing.fiscal_year} {filing.form}",
+        "properties": {
+            "company": company_title,
+            "ticker": filing.ticker,
+            "cik": filing.cik,
+            "form": filing.form,
+            "fiscal_year": filing.fiscal_year,
+            "report_date": filing.report_date,
+            "filing_date": filing.filing_date,
+            "accession": filing.accession,
+            "primary_document": filing.primary_document,
+            "captured_facts": len(facts),
+            "captured_text_facts": len(text_facts),
+            "captured_source_files": len(sources),
+            "calculation_relationships": len(calculations),
+            "text_source": source_name,
+            "text_truncated": text_truncated,
+            "edge_count": len(graph_connections),
+            "graph_connections": graph_connections,
+            "tags": tags,
+        },
+        "edges": graph_connections,
+        "sources": sources,
+        "facts": facts,
+        "text_facts": text_facts,
+        "calculation_relationships": calculations,
+        "filing_text": {"source": source_name, "text": text},
+    }
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(dump_yaml(payload)) + "\n", encoding="utf-8")
+    return target, tags
+
+
+def write_narrative_filing(
+    out: Path,
+    company_title: str,
+    filing: FilingRaw,
+    sources: list[dict[str, Any]],
+    graph_connections: list[dict[str, Any]],
+    max_source_chars: int,
+) -> tuple[Path, list[str]]:
+    target = filing_only_path(out, filing, structured=False)
+    source_name, text, text_truncated = primary_text(filing, max_source_chars)
+    tags = filing_tags(filing, (), structured=False)
+    frontmatter = {
+        "schema_version": SCHEMA_VERSION,
+        "type": "finance.filing",
+        "id": filing.filing_id,
+        "title": f"{filing.ticker} FY{filing.fiscal_year} {filing.form}",
+        "tags": tags,
+        "ticker": filing.ticker,
+        "company": company_title,
+        "cik": filing.cik,
+        "form": filing.form,
+        "fiscal_year": filing.fiscal_year,
+        "report_date": filing.report_date,
+        "filing_date": filing.filing_date,
+        "accession": filing.accession,
+        "primary_document": filing.primary_document,
+        "captured_source_files": len(sources),
+        "text_source": source_name,
+        "text_truncated": text_truncated,
+        "edge_count": len(graph_connections),
+        "edges": graph_connections,
+        "graph": {"out_degree": len(graph_connections), "authoritative": True},
+    }
+    lines = [
+        "---",
+        *dump_yaml(frontmatter),
+        "---",
+        "",
+        f"# {filing.ticker} FY{filing.fiscal_year} {filing.form}",
+        "",
+        "## Filing details",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        f"| Company | {company_title} |",
+        f"| Form | {filing.form} |",
+        f"| Report date | {filing.report_date} |",
+        f"| Filing date | {filing.filing_date} |",
+        f"| Accession | {filing.accession} |",
+        f"| Captured source files | {len(sources)} |",
+        "",
+        "## Source provenance",
+        "",
+        "| Role | Original SEC file | SHA-256 | Bytes |",
+        "| --- | --- | --- | ---: |",
+        *[
+            f"| {source['role']} | {source['file_name']} | `{source['sha256']}` | {source['bytes']} |"
+            for source in sources
+        ],
+        "",
+        "## Filing text",
+        "",
+        text or "_No extractable primary-document text was found; see the raw source path in the SEC download._",
+        "",
+    ]
+    if text_truncated:
+        lines.extend(["", "_Filing text was truncated by `--max-source-chars`._", ""])
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(lines), encoding="utf-8")
+    return target, tags
+
+
+def cache_binding(filing: FilingRaw, fact: dict[str, Any], target: Path, out: Path) -> dict[str, Any] | None:
+    roles = flashokf_roles(str(fact.get("concept", "")))
+    if not roles:
+        return None
+    return {
+        "id": fact["fact_id"],
+        "roles": roles,
+        "concept": fact["concept"],
+        "value": fact["value"],
+        "scale": fact["scale"],
+        "unit": fact["unit"],
+        "currency": fact["currency"],
+        "decimals": fact["decimals"],
+        "period": fact["period"],
+        "dimensions": fact["dimensions"],
+        "accession": filing.accession,
+        "filing_date": filing.filing_date,
+        "path": str(target.relative_to(out)),
+        "content_hash": sha256_obj(fact),
+    }
+
+
+def deduplicate_cache_bindings(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for binding in bindings:
+        period = binding.get("period") or {}
+        key = (
+            binding.get("concept"),
+            period.get("start"),
+            period.get("end"),
+            period.get("kind"),
+            binding.get("unit"),
+            json.dumps(binding.get("dimensions") or {}, sort_keys=True),
+        )
+        current = selected.get(key)
+        if current is None or str(binding.get("filing_date") or "") >= str(current.get("filing_date") or ""):
+            selected[key] = binding
+    return sorted(
+        selected.values(),
+        key=lambda item: (
+            str((item.get("period") or {}).get("end") or ""),
+            str(item.get("concept") or ""),
+            str(item.get("id") or ""),
+        ),
+        reverse=True,
+    )
+
+
+def write_filing_cache(out: Path, ticker: str, bindings: list[dict[str, Any]]) -> dict[str, Any] | None:
+    bindings = deduplicate_cache_bindings(bindings)
+    if not bindings:
+        return None
+    role_counts: dict[str, int] = {}
+    for binding in bindings:
+        binding.pop("filing_date", None)
+        for role in binding["roles"]:
+            role_counts[role] = role_counts.get(role, 0) + 1
+    payload = {
+        "schema_version": "flashokf-bindings/2.0",
+        "ticker": ticker,
+        "fact_count": len(bindings),
+        "roles": role_counts,
+        "facts": bindings,
+    }
+    cache_dir = out / "_index" / "flashokf"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    target = cache_dir / f"{safe_name(ticker)}.json"
+    target.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    return {
+        "ticker": ticker,
+        "path": str(target.relative_to(out)),
+        "fact_count": len(bindings),
+        "roles": sorted(role_counts),
+        "bytes": target.stat().st_size,
+    }
+
+
+def validate_clean_target(out: Path) -> None:
+    resolved = out.resolve()
+    forbidden = {Path("/").resolve(), Path.home().resolve(), Path.cwd().resolve(), DATA_ROOT.resolve()}
+    if resolved in forbidden or len(resolved.parts) < 4:
+        raise ValueError(f"Refusing to clean unsafe output path: {resolved}")
+
+
+def clean_generated_output(out: Path) -> None:
+    """Remove only generated corpus layers; chat vaults and raw inputs are untouched."""
+    validate_clean_target(out)
+    for dirname in (*LEGACY_OUTPUT_DIRS, "filings", "_index"):
+        target = out / dirname
+        if target.exists():
+            shutil.rmtree(target)
+    for filename in ("skipped_companies.json",):
+        target = out / filename
+        if target.exists():
+            target.unlink()
+
+
+def write_filing_indexes(
+    out: Path,
+    id_map: dict[str, str],
+    graph_rows: list[dict[str, Any]],
+    forms: list[str],
+    cache_companies: list[dict[str, Any]],
+) -> None:
+    index_dir = out / "_index"
+    index_dir.mkdir(parents=True, exist_ok=True)
+    (index_dir / "id-map.json").write_text(json.dumps(id_map, indent=2, sort_keys=True), encoding="utf-8")
+    (index_dir / "graph.json").write_text(json.dumps(graph_rows, indent=2), encoding="utf-8")
+    (index_dir / "build.json").write_text(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "layout": "one-file-per-filing",
+                "source": str(DATA_ROOT / "raw"),
+                "forms": forms,
+                "filing_count": sum(1 for row in graph_rows if row.get("type") == "finance.filing"),
+                "graph_node_count": len(graph_rows),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    manifest = {
+        "schema_version": "flashokf-bindings/2.0",
+        "description": "Per-company fact bindings compiled from filing YAML records.",
+        "company_count": len(cache_companies),
+        "fact_count": sum(int(item.get("fact_count", 0)) for item in cache_companies),
+        "companies": sorted(cache_companies, key=lambda item: item["ticker"]),
+    }
+    (index_dir / "flashokf-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+
+def write_current_tag_catalog(path: Path, tag_counts: dict[str, int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "tag_count": len(tag_counts),
+        "tags": [
+            {"tag": tag, "count": tag_counts[tag], "note_types": ["finance.filing"]}
+            for tag in sorted(tag_counts)
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def timeline_connections(filings: list[FilingRaw]) -> dict[str, list[dict[str, Any]]]:
+    """Connect filing nodes to immediate same-company chronological neighbors."""
+    ordered = sorted(filings, key=lambda filing: (filing.filing_date, filing.accession))
+    connections: dict[str, list[dict[str, Any]]] = {}
+    for index, filing in enumerate(ordered):
+        edges: list[dict[str, Any]] = []
+        if index > 0:
+            edges.append({"rel": "prior_filing", "target": ordered[index - 1].filing_id})
+        if index + 1 < len(ordered):
+            edges.append({"rel": "next_filing", "target": ordered[index + 1].filing_id})
+        if filing.form.endswith("/A"):
+            base_form = filing.form[:-2]
+            amended = next(
+                (
+                    candidate
+                    for candidate in reversed(ordered[:index])
+                    if candidate.form == base_form and candidate.report_date == filing.report_date
+                ),
+                None,
+            )
+            if amended is not None:
+                edges.append({"rel": "amends", "target": amended.filing_id})
+        connections[filing.filing_id] = edges
+    return connections
+
+
+def virtual_node(
+    node_id: str,
+    node_type: str,
+    title: str,
+    ticker: str,
+    rel_path: str,
+    tags: list[str],
+    edges: list[dict[str, Any]],
+    preview: str,
+    finokf: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "type": node_type,
+        "title": title,
+        "ticker": ticker,
+        "path": rel_path,
+        "folder": "filings",
+        "tags": tags,
+        "edges": edges,
+        "finokf": finokf or {"entity": ticker},
+        "preview": preview,
+        "virtual": True,
+    }
+
+
+def virtual_filing_graph(
+    filing: FilingRaw,
+    rel_path: str,
+    facts: list[dict[str, Any]],
+    calculations: list[dict[str, Any]],
+    sources: list[dict[str, Any]],
+    base_connections: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Create a compact graph projection whose nodes all open the same filing file."""
+    nodes: list[dict[str, Any]] = []
+    filing_connections = list(base_connections)
+
+    key_facts = sorted(
+        (fact for fact in facts if fact.get("key_fact")),
+        key=lambda fact: (-new_fact_score(fact), str(fact.get("fact_id", ""))),
+    )[:12]
+    fact_node_by_concept: dict[str, str] = {}
+    xbrl_source_id: str | None = None
+
+    for source in sources:
+        source_id = f"source:{filing.ticker}:{filing.accession}:{source['file_name']}"
+        source_title = {
+            "primary_filing_document": "Primary SEC filing",
+            "xbrl_fact_source": "Structured reported facts",
+            "xbrl_calculation_source": "Calculation relationships",
+        }.get(str(source.get("role")), "Supporting SEC evidence")
+        if source.get("role") == "xbrl_fact_source":
+            xbrl_source_id = source_id
+        filing_connections.append({"rel": "has_source", "target": source_id})
+        nodes.append(
+            virtual_node(
+                source_id,
+                "finance.source",
+                f"{filing.ticker} {source_title}",
+                filing.ticker,
+                rel_path,
+                ["finokf/source", f"company/{filing.ticker}", f"form/{filing.form}"],
+                [{"rel": "belongs_to", "target": filing.filing_id}],
+                f"{source['role']} evidence for {filing.ticker} {filing.form}; SHA-256 {source['sha256']}",
+                {
+                    "entity": filing.ticker,
+                    "accession": filing.accession,
+                    "source_file": source["file_name"],
+                    "source_role": source["role"],
+                },
+            )
+        )
+
+    fact_ids: list[str] = []
+    for fact in key_facts:
+        node_id = f"fact:{filing.ticker}:{filing.accession}:{short_hash(str(fact['fact_id']))}"
+        fact_ids.append(node_id)
+        fact_node_by_concept.setdefault(str(fact["concept"]), node_id)
+        edges = [{"rel": "reported_in", "target": filing.filing_id}]
+        if xbrl_source_id:
+            edges.append({"rel": "sourced_from", "target": xbrl_source_id})
+        filing_connections.append({"rel": "reports", "target": node_id})
+        period = fact.get("period") or {}
+        nodes.append(
+            virtual_node(
+                node_id,
+                "finance.fact",
+                f"{filing.ticker} {fact['label']} {period.get('end') or ''}".strip(),
+                filing.ticker,
+                rel_path,
+                merge_tags(
+                    ["finokf/fact", f"company/{filing.ticker}", f"form/{filing.form}"],
+                    information_tags_for_concepts((str(fact["concept"]),)),
+                ),
+                edges,
+                f"{fact['label']}: {fact['display_value']} for {period.get('start') or 'instant'} to {period.get('end')}",
+                {
+                    "entity": filing.ticker,
+                    "accession": filing.accession,
+                    "concept": fact["concept"],
+                    "value": fact["value"],
+                    "scale": fact["scale"],
+                    "unit": fact["unit"],
+                    "currency": fact["currency"],
+                    "period": period,
+                },
+            )
+        )
+
+    grouped_calculations: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for calculation in calculations:
+        key = (str(calculation.get("statement_role", "")), str(calculation.get("subtotal_concept", "")))
+        grouped_calculations.setdefault(key, []).append(calculation)
+    ranked_groups = sorted(grouped_calculations.items(), key=lambda item: (-len(item[1]), item[0]))[:8]
+    for (role, subtotal), components in ranked_groups:
+        constraint_id = f"constraint:{filing.ticker}:{filing.accession}:{short_hash(role + '|' + subtotal)}"
+        edges: list[dict[str, Any]] = [{"rel": "belongs_to", "target": filing.filing_id}]
+        subtotal_fact_id = fact_node_by_concept.get(subtotal)
+        if subtotal_fact_id:
+            edges.append({"rel": "constrains", "target": subtotal_fact_id})
+        for component in components:
+            component_fact_id = fact_node_by_concept.get(str(component.get("component_concept", "")))
+            if component_fact_id and all(edge.get("target") != component_fact_id for edge in edges):
+                edges.append({"rel": "component", "target": component_fact_id})
+        filing_connections.append({"rel": "has_constraint", "target": constraint_id})
+        nodes.append(
+            virtual_node(
+                constraint_id,
+                "finance.constraint",
+                f"{filing.ticker} {humanize_concept(subtotal)} reconciliation",
+                filing.ticker,
+                rel_path,
+                ["finokf/constraint", "information/reconciliation", f"company/{filing.ticker}"],
+                edges,
+                f"{humanize_concept(subtotal)} calculation with {len(components)} reported components.",
+                {
+                    "entity": filing.ticker,
+                    "filing_id": filing.filing_id,
+                    "subtotal_concept": subtotal,
+                    "component_count": len(components),
+                },
+            )
+        )
+
+    bundle_id = f"bundle:{filing.ticker}:{filing.accession}"
+    bundle_edges = [
+        {"rel": "covers", "target": filing.filing_id},
+        {"rel": "entity", "target": f"entity:{filing.ticker}"},
+        *({"rel": "includes", "target": fact_id} for fact_id in fact_ids),
+    ]
+    filing_connections.append({"rel": "has_bundle", "target": bundle_id})
+    nodes.append(
+        virtual_node(
+            bundle_id,
+            "finokf.bundle_view",
+            f"{filing.ticker} FY{filing.fiscal_year} {filing.form} bundle",
+            filing.ticker,
+            rel_path,
+            ["finokf/bundle-view", f"company/{filing.ticker}", f"form/{filing.form}"],
+            bundle_edges,
+            f"Compact evidence bundle for {filing.ticker} {filing.form}, accession {filing.accession}.",
+            {
+                "entity": filing.ticker,
+                "filing_id": filing.filing_id,
+                "fact_count": len(facts),
+                "graph_fact_count": len(fact_ids),
+            },
+        )
+    )
+    return nodes, filing_connections
+
+
 def main() -> int:
     args = parse_args()
     input_dir = Path(args.input_dir)
     out = Path(args.output_dir)
+    if not input_dir.exists():
+        print(f"Input directory does not exist: {input_dir}", file=sys.stderr)
+        return 2
+    if args.clean_output and out.exists():
+        clean_generated_output(out)
     out.mkdir(parents=True, exist_ok=True)
-    forms = set(args.forms)
 
-    company_dirs = sorted(p for p in input_dir.iterdir() if p.is_dir())
+    forms = set(args.forms)
+    company_dirs = sorted(p for p in input_dir.iterdir() if p.is_dir() and (p / "company.json").exists())
     if args.tickers:
-        wanted = {t.upper() for t in args.tickers}
-        company_dirs = [p for p in company_dirs if any(f"_{t}_" in p.name for t in wanted)]
+        wanted = {ticker.upper() for ticker in args.tickers}
+        company_dirs = [
+            company_dir
+            for company_dir in company_dirs
+            if str(load_json(company_dir / "company.json").get("ticker", "")).upper() in wanted
+        ]
     if args.limit is not None:
         company_dirs = company_dirs[: args.limit]
 
     id_map: dict[str, str] = {}
     graph_rows: list[dict[str, Any]] = []
-    tag_usage: dict[str, dict[str, Any]] = {}
+    tag_counts: dict[str, int] = {}
     skipped: list[dict[str, str]] = []
-    flashokf_companies: list[dict[str, Any]] = []
+    cache_companies: list[dict[str, Any]] = []
+    yaml_count = 0
+    markdown_count = 0
 
     for index, company_dir in enumerate(company_dirs, start=1):
-        print(f"[{index:03d}/{len(company_dirs):03d}] {company_dir.name}", flush=True)
-        try:
-            nodes, company_ids, skip = convert_company(company_dir, out, forms, args.max_source_chars)
-        except Exception as exc:  # pragma: no cover - defensive for batch runs
-            skipped.append({"company": company_dir.name, "reason": f"error: {exc}"})
-            print(f"    ! skipped: {exc}", flush=True)
+        company = load_json(company_dir / "company.json")
+        title = str(company["title"])
+        ticker = str(company["ticker"]).upper()
+        cik = str(company["cik"])
+        print(f"[{index:03d}/{len(company_dirs):03d}] {ticker}", flush=True)
+        filings = sorted(
+            collect_filings(ticker, cik, company_dir, forms),
+            key=lambda filing: (filing.filing_date, filing.accession),
+            reverse=True,
+        )
+        if args.filing_limit_per_company is not None:
+            filings = filings[: args.filing_limit_per_company]
+        if not filings:
+            skipped.append({"company": company_dir.name, "reason": "no-filings"})
+            print("    - skipped: no filings", flush=True)
             continue
-        if skip:
-            skipped.append({"company": company_dir.name, "reason": skip})
-            print(f"    - skipped: {skip}", flush=True)
-            continue
-        id_map.update(company_ids)
-        graph_rows.extend({"id": n.node_id, "type": n.node_type, "path": str(n.path.relative_to(out))} for n in nodes)
-        flashokf_company = write_flashokf_company_index(out, nodes)
-        if flashokf_company:
-            flashokf_companies.append(flashokf_company)
-        for node in nodes:
-            for tag in node.frontmatter.get("tags", []):
-                usage = tag_usage.setdefault(str(tag), {"count": 0, "note_types": set()})
-                usage["count"] += 1
-                usage["note_types"].add(node.node_type)
-        print(f"    -> {len(nodes)} notes", flush=True)
 
-    write_indexes(out, id_map, graph_rows, args.forms, flashokf_companies)
-    write_tag_catalog(Path(args.tag_catalog), out)
+        company_bindings: list[dict[str, Any]] = []
+        company_filing_nodes: list[dict[str, Any]] = []
+        filing_timelines = timeline_connections(filings)
+        for filing in filings:
+            try:
+                sources = source_manifest(filing)
+                structured = is_structured_filing(filing)
+                facts: list[dict[str, Any]] = []
+                text_facts: list[dict[str, Any]] = []
+                calculations: list[dict[str, Any]] = []
+                predicted_target = filing_only_path(out, filing, structured)
+                rel_path = str(predicted_target.relative_to(out))
+                if structured:
+                    facts, text_facts = filing_fact_inventory(filing)
+                    calculations = filing_calculations(filing)
+                graph_connections = filing_timelines.get(filing.filing_id, [])
+                if structured:
+                    target, tags = write_structured_filing(
+                        out,
+                        title,
+                        filing,
+                        facts,
+                        text_facts,
+                        calculations,
+                        sources,
+                        graph_connections,
+                        args.max_source_chars,
+                    )
+                    for fact in facts:
+                        binding = cache_binding(filing, fact, target, out)
+                        if binding:
+                            company_bindings.append(binding)
+                    yaml_count += 1
+                else:
+                    target, tags = write_narrative_filing(
+                        out, title, filing, sources, graph_connections, args.max_source_chars
+                    )
+                    markdown_count += 1
+            except Exception as exc:  # pragma: no cover - continue a long batch safely
+                skipped.append({"company": company_dir.name, "filing": filing.accession, "reason": f"error: {exc}"})
+                print(f"    ! {filing.form} {filing.accession}: {exc}", flush=True)
+                continue
+
+            filing_node = virtual_node(
+                filing.filing_id,
+                "finance.filing",
+                f"{filing.ticker} FY{filing.fiscal_year} {filing.form}",
+                filing.ticker,
+                rel_path,
+                tags,
+                graph_connections,
+                f"{filing.form} filed {filing.filing_date}; report date {filing.report_date}; {len(facts)} numeric facts.",
+                {
+                    "entity": filing.ticker,
+                    "cik": filing.cik,
+                    "form": filing.form,
+                    "fiscal_year": filing.fiscal_year,
+                    "report_date": filing.report_date,
+                    "filing_date": filing.filing_date,
+                    "accession": filing.accession,
+                    "fact_count": len(facts),
+                },
+            )
+            filing_node["virtual"] = False
+            company_filing_nodes.append(filing_node)
+            id_map[str(filing_node["id"])] = rel_path
+            for tag in tags:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        if company_filing_nodes:
+            graph_rows.extend(company_filing_nodes)
+        cache_company = write_filing_cache(out, ticker, company_bindings)
+        if cache_company:
+            cache_companies.append(cache_company)
+        print(f"    -> {len(filings)} filing files", flush=True)
+
+    write_filing_indexes(out, id_map, graph_rows, args.forms, cache_companies)
+    write_current_tag_catalog(Path(args.tag_catalog), tag_counts)
+    skipped_path = out / "_index" / "skipped_filings.json"
     if skipped:
-        (out / "skipped_companies.json").write_text(json.dumps(skipped, indent=2), encoding="utf-8")
-        print(f"\nSkipped {len(skipped)} companies. See {out / 'skipped_companies.json'}")
-    print(f"\nFinished. {len(graph_rows)} notes written to: {out}")
+        skipped_path.write_text(json.dumps(skipped, indent=2), encoding="utf-8")
+    elif skipped_path.exists():
+        skipped_path.unlink()
+    print(
+        f"\nFinished. {yaml_count} structured YAML + {markdown_count} narrative Markdown "
+        f"= {yaml_count + markdown_count} filing files in {out / 'filings'}"
+    )
     return 0
 
 

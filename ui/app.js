@@ -42,6 +42,14 @@ const NODE_COLORS = {
   manifest: "#9c8b9a",
 };
 
+const FILING_COLORS = {
+  "10-K": "#7fb3d5",
+  "10-Q": "#82c9a5",
+  "8-K": "#e79a87",
+  "DEF 14A": "#b69ac8",
+  OTHER: "#d8cec7",
+};
+
 const TYPE_LABELS = {
   "finance.entity": "Entity",
   "finance.filing": "Filing",
@@ -63,6 +71,7 @@ const TRACE_ONLY_NODE_TYPES = new Set([
   "finokf.skill_run",
   "finokf.run_manifest",
 ]);
+const COMPANY_FILING_EDGE_TYPES = new Set(["filed_by", "has_filing"]);
 
 const els = {
   graphView: document.getElementById("graphView"),
@@ -110,9 +119,23 @@ function nodeKind(type) {
   if (type === "finokf.run_manifest") return "manifest";
   return "source";
 }
-const nodeColor = (type) => NODE_COLORS[nodeKind(type)] || NODE_COLORS.source;
-const nodeLabel = (node) => TYPE_LABELS[node?.type] || node?.type || "File";
-const stemOf = (path) => (path || "").split("/").pop().replace(/\.md$/i, "");
+function filingForm(node) {
+  const raw = String(node?.finokf?.form || "").toUpperCase().replace(/\/A$/, "");
+  if (raw.startsWith("10-K")) return "10-K";
+  if (raw.startsWith("10-Q")) return "10-Q";
+  if (raw.startsWith("8-K")) return "8-K";
+  if (raw.startsWith("DEF 14A")) return "DEF 14A";
+  return "OTHER";
+}
+function nodeColor(nodeOrType) {
+  if (nodeOrType && typeof nodeOrType === "object" && nodeOrType.type === "finance.filing") {
+    return FILING_COLORS[filingForm(nodeOrType)] || FILING_COLORS.OTHER;
+  }
+  const type = typeof nodeOrType === "string" ? nodeOrType : nodeOrType?.type;
+  return NODE_COLORS[nodeKind(type)] || NODE_COLORS.source;
+}
+const nodeLabel = (node) => node?.type === "finance.filing" ? filingForm(node) : (TYPE_LABELS[node?.type] || node?.type || "File");
+const stemOf = (path) => (path || "").split("/").pop().replace(/\.(md|ya?ml)$/i, "");
 const documentUrl = (relPath) => `../${relPath.replace(/^\.\//, "")}`;
 const pathDir = (path) => path.split("/").slice(0, -1).join("/");
 const isTraceOnlyNode = (node) => TRACE_ONLY_NODE_TYPES.has(node?.type);
@@ -135,7 +158,7 @@ async function loadIndex() {
   if (!response.ok) throw new Error("Missing ui/vault-index.json. Run scripts/build_vault_viewer_index.py first.");
 
   state.index = await response.json();
-  state.nodes = state.index.nodes || [];
+  state.nodes = (state.index.nodes || []).filter((node) => node.type === "finance.filing" || node.type === "finance.entity");
   state.nodeById = new Map(state.nodes.map((node) => [node.id, node]));
 
   for (const node of state.nodes) {
@@ -143,12 +166,13 @@ async function loadIndex() {
     if (node.title) state.titleToId.set(String(node.title).toLowerCase(), node.id);
   }
 
-  state.visibleNodes = state.nodes.filter((node) => !isTraceOnlyNode(node));
+  state.visibleNodes = state.nodes;
   const available = new Set(state.visibleNodes.map((node) => node.id));
   state.visibleLinks = [];
   state.adjacency = new Map(state.visibleNodes.map((node) => [node.id, new Set()]));
   for (const node of state.visibleNodes) {
     for (const edge of node.edges || []) {
+      if (!COMPANY_FILING_EDGE_TYPES.has(edge.rel)) continue;
       if (!available.has(edge.target)) continue;
       state.visibleLinks.push({ source: node.id, target: edge.target, rel: edge.rel || "edge" });
       state.adjacency.get(node.id).add(edge.target);
@@ -190,12 +214,8 @@ function mainGraphLinks() {
 }
 
 function overviewGraph() {
-  // Structural spine across companies + the busiest facts, capped for smooth physics.
-  const priority = { "finance.entity": 0, "finokf.bundle_view": 1, "finance.filing": 2, "finance.constraint": 3, "finance.source": 4, "finance.fact": 5 };
-  const picked = [...mainGraphNodes()]
-    .sort((a, b) => (priority[a.type] ?? 9) - (priority[b.type] ?? 9) || degreeOf(b.id) - degreeOf(a.id))
-    .slice(0, 170);
-  const ids = new Set(picked.map((n) => n.id));
+  const picked = mainGraphNodes();
+  const ids = new Set(picked.map((node) => node.id));
   return {
     nodes: picked,
     links: mainGraphLinks().filter((l) => ids.has(l.source) && ids.has(l.target)),
@@ -233,9 +253,12 @@ function renderGraph() {
   const focus = state.graphFocusId;
   const data = focus ? neighborhood(focus) : overviewGraph();
   state.graph.setData(data.nodes, data.links, state.selectedId);
+  if (focus) requestAnimationFrame(() => state.graph.fitLocal(true));
+  const filingCount = data.nodes.filter((node) => node.type === "finance.filing").length;
+  const companyCount = data.nodes.filter((node) => node.type === "finance.entity").length;
   els.status.textContent = focus
-    ? `local graph · ${data.nodes.length} notes`
-    : `overview · ${data.nodes.length} of ${state.visibleNodes.length}`;
+    ? `local graph · ${filingCount} filings · ${companyCount} companies`
+    : `overview · ${filingCount} filings · ${companyCount} companies`;
 }
 
 function formatVaultTime(value) {
@@ -415,6 +438,187 @@ function renderMarkdown(raw) {
   return props + renderMarkdownBody(body) + notice;
 }
 
+function yamlScalarValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (text === "null") return null;
+  if (text === "true") return true;
+  if (text === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    try { return text.startsWith('"') ? JSON.parse(text) : text.slice(1, -1).replace(/''/g, "'"); }
+    catch { return text.slice(1, -1); }
+  }
+  if (text === "[]") return [];
+  if (text === "{}") return {};
+  return text;
+}
+
+function parseStructuredYaml(raw) {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  const indentation = (line) => (line.match(/^ */) || [""])[0].length;
+  const nextContent = (start) => {
+    let index = start;
+    while (index < lines.length && !lines[index].trim()) index += 1;
+    return index;
+  };
+
+  function parseBlock(start, indent) {
+    let index = nextContent(start);
+    if (index >= lines.length || indentation(lines[index]) < indent) return [{}, index];
+    const isList = indentation(lines[index]) === indent && lines[index].slice(indent).startsWith("- ");
+    const container = isList ? [] : {};
+
+    while (index < lines.length) {
+      if (!lines[index].trim()) { index += 1; continue; }
+      const currentIndent = indentation(lines[index]);
+      if (currentIndent < indent) break;
+      if (currentIndent > indent) break;
+      const content = lines[index].slice(indent);
+
+      if (isList) {
+        if (!content.startsWith("- ")) break;
+        const first = content.slice(2).trim();
+        if (!first) {
+          const childAt = nextContent(index + 1);
+          const childIndent = childAt < lines.length ? indentation(lines[childAt]) : indent + 2;
+          const [child, next] = parseBlock(childAt, childIndent);
+          container.push(child);
+          index = next;
+          continue;
+        }
+        const split = first.indexOf(":");
+        if (split === -1) {
+          container.push(yamlScalarValue(first));
+          index += 1;
+          continue;
+        }
+        const item = {};
+        const key = first.slice(0, split).trim();
+        const rest = first.slice(split + 1).trim();
+        item[key] = rest ? yamlScalarValue(rest) : null;
+        index += 1;
+        const childAt = nextContent(index);
+        if (childAt < lines.length && indentation(lines[childAt]) > indent) {
+          const childIndent = indentation(lines[childAt]);
+          const [tail, next] = parseBlock(childAt, childIndent);
+          if (rest || Array.isArray(tail)) Object.assign(item, tail);
+          else item[key] = tail;
+          index = next;
+        }
+        container.push(item);
+        continue;
+      }
+
+      if (content.startsWith("- ")) break;
+      const split = content.indexOf(":");
+      if (split === -1) { index += 1; continue; }
+      const key = content.slice(0, split).trim();
+      const rest = content.slice(split + 1).trim();
+      if (rest === "|-" || rest === "|") {
+        index += 1;
+        const block = [];
+        let blockIndent = null;
+        while (index < lines.length) {
+          const candidateIndent = indentation(lines[index]);
+          if (lines[index].trim() && candidateIndent <= indent) break;
+          if (blockIndent === null && lines[index].trim()) blockIndent = candidateIndent;
+          const strip = blockIndent === null ? indent + 2 : blockIndent;
+          block.push(lines[index].length >= strip ? lines[index].slice(strip) : "");
+          index += 1;
+        }
+        while (block.length && block[block.length - 1] === "") block.pop();
+        container[key] = block.join("\n");
+        continue;
+      }
+      if (rest) {
+        container[key] = yamlScalarValue(rest);
+        index += 1;
+        continue;
+      }
+      const childAt = nextContent(index + 1);
+      if (childAt >= lines.length || indentation(lines[childAt]) <= indent) {
+        container[key] = {};
+        index = childAt;
+        continue;
+      }
+      const childIndent = indentation(lines[childAt]);
+      const [child, next] = parseBlock(childAt, childIndent);
+      container[key] = child;
+      index = next;
+    }
+    return [container, index];
+  }
+
+  return parseBlock(0, 0)[0];
+}
+
+function displayCell(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return value.map(displayCell).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function flatTableRow(row) {
+  const flat = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    if (key === "period" && value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [periodKey, periodValue] of Object.entries(value)) flat[`period.${periodKey}`] = periodValue;
+    } else {
+      flat[key] = value;
+    }
+  }
+  return flat;
+}
+
+function structuredTable(rows, preferredColumns = []) {
+  if (!Array.isArray(rows) || !rows.length) return '<p class="empty-table">No records reported.</p>';
+  const flattened = rows.map(flatTableRow);
+  const discovered = [];
+  for (const row of flattened) {
+    for (const key of Object.keys(row)) if (!discovered.includes(key)) discovered.push(key);
+  }
+  const columns = [...preferredColumns.filter((key) => discovered.includes(key)), ...discovered.filter((key) => !preferredColumns.includes(key))];
+  return `<div class="structured-table-wrap"><table class="structured-table"><thead><tr>${columns.map((key) => `<th>${escapeHtml(key)}</th>`).join("")}</tr></thead><tbody>${flattened.map((row) => `<tr>${columns.map((key) => `<td>${escapeHtml(displayCell(row[key]))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderStructuredYaml(raw) {
+  let record;
+  try { record = parseStructuredYaml(raw); }
+  catch (error) { return `<p><strong>Could not parse filing YAML:</strong> ${escapeHtml(error.message)}</p><pre>${escapeHtml(raw)}</pre>`; }
+  const properties = record.properties || {};
+  const tags = Array.isArray(properties.tags) ? properties.tags : [];
+  const hiddenProperties = new Set(["tags", "edge_count", "graph_connections"]);
+  const propertyItems = Object.entries(properties).filter(([key]) => !hiddenProperties.has(key));
+  const propertyHtml = `<section class="structured-properties"><div class="property-grid">${propertyItems.map(([key, value]) => `<div class="property-item"><span>${escapeHtml(key)}</span><strong>${escapeHtml(displayCell(value))}</strong></div>`).join("")}</div>${tags.length ? `<div class="property-tags">${tags.map((tag) => `<span>${escapeHtml(displayCell(tag))}</span>`).join("")}</div>` : ""}</section>`;
+  const sourceTable = structuredTable(record.sources || [], ["role", "file_name", "sha256", "bytes"]);
+  const keyFacts = (record.facts || []).filter((fact) => fact.key_fact);
+  const keyFactTable = structuredTable(keyFacts, [
+    "label", "display_value", "period.start", "period.end", "reporting_role", "concept", "unit", "dimensions", "fact_id",
+  ]);
+  const factTable = structuredTable(record.facts || [], [
+    "key_fact", "label", "display_value", "raw_value", "unit", "period.start", "period.end",
+    "period.kind", "reporting_role", "concept", "decimals", "dimensions", "is_extension", "fact_id",
+  ]);
+  const textFactTable = structuredTable(record.text_facts || [], [
+    "label", "value", "period.start", "period.end", "reporting_role", "concept", "language", "dimensions", "is_extension", "fact_id",
+  ]);
+  const calculationTable = structuredTable(record.calculation_relationships || [], [
+    "subtotal_concept", "component_concept", "weight", "order", "statement_role",
+  ]);
+  const filingText = record.filing_text || {};
+  const textHtml = filingText.text
+    ? `<details class="filing-text"><summary>View full filing text · ${escapeHtml(displayCell(filingText.source))}</summary><pre>${escapeHtml(displayCell(filingText.text))}</pre></details>`
+    : '<p class="empty-table">No extractable filing text was found.</p>';
+  return `<article class="structured-document"><h1>${escapeHtml(displayCell(record.title || "Structured filing"))}</h1>${propertyHtml}<h2>Key reported facts <small>${keyFacts.length.toLocaleString()}</small></h2>${keyFactTable}<h2>All reported facts <small>${(record.facts || []).length.toLocaleString()}</small></h2>${factTable}<h2>Reported text facts <small>${(record.text_facts || []).length.toLocaleString()}</small></h2>${textFactTable}<h2>Calculation relationships <small>${(record.calculation_relationships || []).length.toLocaleString()}</small></h2>${calculationTable}<h2>Source provenance <small>${(record.sources || []).length.toLocaleString()}</small></h2>${sourceTable}<h2>Filing text</h2>${textHtml}</article>`;
+}
+
+function renderDocument(raw, path = "") {
+  return /\.ya?ml$/i.test(path) ? renderStructuredYaml(raw) : renderMarkdown(raw);
+}
+
 /* ------------------------------------------------------------------ open / edit / save */
 async function openDocument(path, title, options = {}) {
   let text;
@@ -432,7 +636,7 @@ async function openDocument(path, title, options = {}) {
   els.docTitle.textContent = title;
   els.docTitle.title = path;
   els.docEditor.value = text;
-  els.docRendered.innerHTML = renderMarkdown(text);
+  els.docRendered.innerHTML = renderDocument(text, path);
   els.docRendered.scrollTop = 0;
   setEditing(false);
   setDirty(false);
@@ -467,7 +671,7 @@ function setEditing(editing) {
   els.editToggle.textContent = editing ? "Reading" : "Edit";
   els.editToggle.classList.toggle("active", editing);
   if (editing) els.docEditor.focus();
-  else els.docRendered.innerHTML = renderMarkdown(els.docEditor.value);
+  else els.docRendered.innerHTML = renderDocument(els.docEditor.value, state.currentFetchPath || "");
 }
 
 function setDirty(dirty) {
@@ -721,23 +925,39 @@ class ForceGraph {
     this.selectedId = null;
     this.hoverId = null;
     this.alpha = 0;
+    this.largeLayout = false;
+    this.hasLoaded = false;
+    this.hasMotion = false;
+    this.layoutStartedAt = 0;
+    this.bloomEndsAt = 0;
+    this.pendingLocalFitAt = 0;
+    this.needsDraw = true;
     this.transform = { x: 0, y: 0, k: 1 };
     this.pointer = { down: false, dragNode: null, panning: false, moved: 0, lastX: 0, lastY: 0, downX: 0, downY: 0 };
 
-    // physics constants (tuned to Obsidian's calm settle)
-    this.LINK_DIST = 74;
-    this.LINK_STRENGTH = 0.04;
-    this.CHARGE = 3800;
-    this.GRAVITY = 0.03;
-    this.VELOCITY_DECAY = 0.84;
+    // Physics constants tuned to Obsidian's soft, slightly elastic graph motion.
+    this.LINK_DIST = 145;
+    this.LINK_STRENGTH = 0.022;
+    this.CHARGE = 6500;
+    this.GRAVITY = 0.006;
+    this.CLUSTER_GRAVITY = 0.075;
+    this.VELOCITY_DECAY = 0.87;
     this.ALPHA_DECAY = 0.018;
     this.ALPHA_MIN = 0.0015;
     this.MAX_V = 18;
+    this.BLOOM_DURATION = 9000;
+    this.BLOOM_SETTLE = 2200;
 
     this.resize();
     window.addEventListener("resize", () => this.resize());
     canvas.addEventListener("pointerdown", (e) => this.onPointerDown(e));
     canvas.addEventListener("pointermove", (e) => this.onPointerMove(e));
+    canvas.addEventListener("pointerleave", () => {
+      if (this.pointer.down) return;
+      this.hoverId = null;
+      this.canvas.style.cursor = "grab";
+      this.needsDraw = true;
+    });
     window.addEventListener("pointerup", (e) => this.onPointerUp(e));
     canvas.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     requestAnimationFrame(() => this.tick());
@@ -750,11 +970,15 @@ class ForceGraph {
     this.height = Math.max(320, rect.height);
     this.canvas.width = Math.floor(this.width * this.dpr);
     this.canvas.height = Math.floor(this.height * this.dpr);
+    this.needsDraw = true;
   }
 
   setData(nodes, links, selectedId, options = {}) {
     const old = new Map(this.nodes.map((n) => [n.id, n]));
-    const first = old.size === 0;
+    const first = !this.hasLoaded;
+    const largeLayout = nodes.length > 600;
+    const layoutModeChanged = this.hasLoaded && this.largeLayout !== largeLayout;
+    const continuingBloom = largeLayout && this.bloomEndsAt > performance.now();
     this.selectedId = selectedId;
     this.directed = Boolean(options.directed);
 
@@ -764,15 +988,60 @@ class ForceGraph {
       degree.set(l.target, (degree.get(l.target) || 0) + 1);
     }
 
+    const tickers = [...new Set(nodes.map((node) => String(node.ticker || "UNKNOWN")))].sort();
+    const clusterCounts = new Map();
+    for (const node of nodes) {
+      const ticker = String(node.ticker || "UNKNOWN");
+      clusterCounts.set(ticker, (clusterCounts.get(ticker) || 0) + 1);
+    }
+    const largestCluster = Math.max(1, ...clusterCounts.values());
+    const localRadius = 36 + Math.sqrt(largestCluster) * 17;
+    const clusterSpacing = Math.max(240, localRadius * 1.42);
+    const goldenAngle = 2.399963229728653;
+    this.clusterCenters = new Map(tickers.map((ticker, index) => {
+      if (tickers.length === 1) return [ticker, { x: 0, y: 0 }];
+      const angle = index * goldenAngle + (this.stableUnit(ticker) - 0.5) * 0.18;
+      const radius = clusterSpacing * Math.sqrt(index);
+      return [ticker, {
+        x: Math.cos(angle) * radius * 1.16,
+        y: Math.sin(angle) * radius * 0.88,
+      }];
+    }));
+    const maxCenterDistance = Math.max(1, ...[...this.clusterCenters.values()].map((center) => Math.hypot(center.x / 1.16, center.y / 0.88)));
+    const clusterOffsets = new Map();
     this.nodes = nodes.map((node, index) => {
       const prev = old.get(node.id);
-      const angle = index * 2.399963;
-      const seedR = 30 + Math.sqrt(index) * 12;
+      const ticker = String(node.ticker || "UNKNOWN");
+      const center = this.clusterCenters.get(ticker) || { x: 0, y: 0 };
+      const within = clusterOffsets.get(ticker) || 0;
+      if (node.type !== "finance.entity") clusterOffsets.set(ticker, within + 1);
+      const seed = this.stableUnit(node.id);
+      const orientation = (this.stableUnit(`${ticker}:orientation`) - 0.5) * Math.PI;
+      const angle = within * goldenAngle + (seed - 0.5) * (largeLayout ? 0.78 : 2.4);
+      const lobe = 1 + Math.sin(angle * 3 + orientation) * 0.12;
+      const seedR = node.type === "finance.entity"
+        ? 0
+        : ((largeLayout ? 32 : 54) + Math.sqrt(within + 0.5) * (largeLayout ? 16.5 : 27))
+          * (0.75 + seed * 0.5) * lobe;
+      const rawX = Math.cos(angle) * seedR * 1.1;
+      const rawY = Math.sin(angle) * seedR * 0.94;
+      const layoutDx = rawX * Math.cos(orientation) - rawY * Math.sin(orientation);
+      const layoutDy = rawX * Math.sin(orientation) + rawY * Math.cos(orientation);
+      const targetX = center.x + layoutDx;
+      const targetY = center.y + layoutDy;
+      const centerProgress = Math.min(1, Math.hypot(center.x / 1.16, center.y / 0.88) / maxCenterDistance);
+      const revealDelay = node.type === "finance.entity"
+        ? 160 + centerProgress * 6200
+        : 220 + centerProgress * 6500 + seed * 1300;
+      const startScale = first && largeLayout ? 0.018 : 1;
       return {
         ...node,
         deg: degree.get(node.id) || 0,
-        x: prev?.x ?? Math.cos(angle) * seedR,
-        y: prev?.y ?? Math.sin(angle) * seedR,
+        x: (!layoutModeChanged && prev?.x !== undefined) ? prev.x : targetX * startScale + Math.cos(index * 1.618) * (first && largeLayout ? 2.5 : 0),
+        y: (!layoutModeChanged && prev?.y !== undefined) ? prev.y : targetY * startScale + Math.sin(index * 1.618) * (first && largeLayout ? 2.5 : 0),
+        layoutDx: (!layoutModeChanged && prev?.layoutDx !== undefined) ? prev.layoutDx : layoutDx,
+        layoutDy: (!layoutModeChanged && prev?.layoutDy !== undefined) ? prev.layoutDy : layoutDy,
+        revealDelay: prev?.revealDelay ?? (first && largeLayout ? revealDelay : 0),
         vx: 0,
         vy: 0,
         fx: null,
@@ -780,9 +1049,34 @@ class ForceGraph {
       };
     });
     this.nodeById = new Map(this.nodes.map((n) => [n.id, n]));
+    this.companyNodes = new Map(this.nodes
+      .filter((node) => node.type === "finance.entity")
+      .map((node) => [String(node.ticker || "UNKNOWN"), node]));
     this.links = this.dedupe(links, this.directed).filter((l) => this.nodeById.has(l.source) && this.nodeById.has(l.target));
-    this.reheat(first ? 1 : 0.7);
-    if (first) requestAnimationFrame(() => this.fit(false));
+    this.largeLayout = largeLayout;
+    if (first && this.largeLayout) {
+      this.layoutStartedAt = performance.now();
+      this.bloomEndsAt = this.layoutStartedAt + this.BLOOM_DURATION + this.BLOOM_SETTLE;
+    } else if (!continuingBloom) {
+      this.layoutStartedAt = performance.now() - this.BLOOM_DURATION;
+      this.bloomEndsAt = 0;
+    }
+    this.hasLoaded = true;
+    this.hasMotion = true;
+    this.pendingLocalFitAt = this.largeLayout ? 0 : performance.now() + 700;
+    this.reheat(this.largeLayout ? (first ? 0.95 : 0.48) : (first ? 1 : 0.7));
+    this.needsDraw = true;
+    if (first) requestAnimationFrame(() => this.fit(false, this.largeLayout));
+  }
+
+  stableUnit(value) {
+    let hash = 2166136261;
+    const text = String(value || "");
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
   }
 
   dedupe(links, directed = false) {
@@ -797,62 +1091,116 @@ class ForceGraph {
     return out;
   }
 
-  reheat(value = 0.6) { this.alpha = Math.max(this.alpha, value); }
+  reheat(value = 0.6) {
+    this.alpha = Math.max(this.alpha, value);
+    this.needsDraw = true;
+  }
 
   radius(node) {
-    if (node.type === "finance.filing") return 6.4;
+    if (node.type === "finance.entity") return this.largeLayout ? 24 : 34;
+    if (node.type === "finance.filing") return this.largeLayout ? 3.6 : 5.8;
     return 3.4 + Math.sqrt(node.deg) * 1.7 + (node.type === "finance.entity" ? 2 : 0);
+  }
+
+  revealProgress(node, now = performance.now()) {
+    if (!this.largeLayout || !this.bloomEndsAt) return 1;
+    const elapsed = now - this.layoutStartedAt - (node.revealDelay || 0);
+    return Math.max(0, Math.min(1, elapsed / 900));
+  }
+
+  easeOut(value) {
+    return 1 - Math.pow(1 - value, 3);
   }
 
   /* ---- simulation ---- */
   step() {
     const nodes = this.nodes;
     const alpha = this.alpha;
+    const now = performance.now();
+    let motion = 0;
 
-    // charge repulsion (O(n^2), fine for the capped visible set)
-    for (let i = 0; i < nodes.length; i += 1) {
-      const a = nodes[i];
-      for (let j = i + 1; j < nodes.length; j += 1) {
-        const b = nodes[j];
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        let d2 = dx * dx + dy * dy;
-        if (d2 < 0.01) { dx = (Math.random() - 0.5) * 0.6; dy = (Math.random() - 0.5) * 0.6; d2 = dx * dx + dy * dy + 0.01; }
-        const d = Math.sqrt(d2);
-        const force = (this.CHARGE * alpha) / d2;
-        const fx = (dx / d) * force;
-        const fy = (dy / d) * force;
-        a.vx -= fx; a.vy -= fy;
-        b.vx += fx; b.vy += fy;
+    // Small graphs use pairwise repulsion. Large graphs skip the O(n²) term
+    // and animate with company-center and link forces only.
+    if (!this.largeLayout) {
+      for (let i = 0; i < nodes.length; i += 1) {
+        const a = nodes[i];
+        for (let j = i + 1; j < nodes.length; j += 1) {
+          const b = nodes[j];
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          let d2 = dx * dx + dy * dy;
+          if (d2 < 0.01) { dx = (Math.random() - 0.5) * 0.6; dy = (Math.random() - 0.5) * 0.6; d2 = dx * dx + dy * dy + 0.01; }
+          const d = Math.sqrt(d2);
+          const force = (this.CHARGE * alpha) / d2;
+          const fx = (dx / d) * force;
+          const fy = (dy / d) * force;
+          a.vx -= fx; a.vy -= fy;
+          b.vx += fx; b.vy += fy;
+
+          // Keep the loose Obsidian-like layout, but prevent nodes from
+          // settling on top of one another.
+          const minDistance = this.radius(a) + this.radius(b) + 13;
+          if (d < minDistance) {
+            const collision = ((minDistance - d) / minDistance) * 2.8 * alpha;
+            a.vx -= (dx / d) * collision;
+            a.vy -= (dy / d) * collision;
+            b.vx += (dx / d) * collision;
+            b.vy += (dy / d) * collision;
+          }
+        }
       }
     }
 
-    // link springs
-    for (const link of this.links) {
-      const a = this.nodeById.get(link.source);
-      const b = this.nodeById.get(link.target);
-      let dx = b.x - a.x;
-      let dy = b.y - a.y;
-      const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
-      const diff = ((d - this.LINK_DIST) / d) * this.LINK_STRENGTH * alpha;
-      const fx = dx * diff;
-      const fy = dy * diff;
-      a.vx += fx; a.vy += fy;
-      b.vx -= fx; b.vy -= fy;
+    // Link springs are useful for small local graphs. The complete graph uses
+    // stable radial targets so thousands of filings do not collapse onto hubs.
+    if (!this.largeLayout) {
+      for (const link of this.links) {
+        const a = this.nodeById.get(link.source);
+        const b = this.nodeById.get(link.target);
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        const diff = ((d - this.LINK_DIST) / d) * this.LINK_STRENGTH * alpha;
+        const fx = dx * diff;
+        const fy = dy * diff;
+        a.vx += fx; a.vy += fy;
+        b.vx -= fx; b.vy -= fy;
+      }
     }
 
-    // gravity to center + integrate
+    // Company clustering + gentle gravity to the overall center + integrate.
+    // On a large graph, filings are elastic satellites of the company hub. That
+    // keeps all 11k+ nodes interactive without an O(n²) simulation.
     for (const node of nodes) {
       if (node.fx !== null) { node.x = node.fx; node.y = node.fy; node.vx = 0; node.vy = 0; continue; }
+      const cluster = this.clusterCenters?.get(String(node.ticker || "UNKNOWN"));
+      if (cluster && this.largeLayout) {
+        let targetX = cluster.x;
+        let targetY = cluster.y;
+        const progress = this.easeOut(this.revealProgress(node, now));
+        if (node.type === "finance.entity") {
+          targetX = cluster.x * progress;
+          targetY = cluster.y * progress;
+        } else {
+          const hub = this.companyNodes.get(String(node.ticker || "UNKNOWN"));
+          targetX = (hub?.x ?? cluster.x) + node.layoutDx * progress;
+          targetY = (hub?.y ?? cluster.y) + node.layoutDy * progress;
+        }
+        const spring = 0.026 + this.CLUSTER_GRAVITY * Math.max(0.22, alpha);
+        node.vx += (targetX - node.x) * spring;
+        node.vy += (targetY - node.y) * spring;
+      }
       node.vx -= node.x * this.GRAVITY * alpha;
       node.vy -= node.y * this.GRAVITY * alpha;
       node.vx = Math.max(-this.MAX_V, Math.min(this.MAX_V, node.vx * this.VELOCITY_DECAY));
       node.vy = Math.max(-this.MAX_V, Math.min(this.MAX_V, node.vy * this.VELOCITY_DECAY));
       node.x += node.vx;
       node.y += node.vy;
+      motion += Math.abs(node.vx) + Math.abs(node.vy);
     }
 
-    this.alpha += (0 - this.alpha) * this.ALPHA_DECAY;
+    this.hasMotion = motion / Math.max(1, nodes.length) > 0.002;
+    this.alpha += (0 - this.alpha) * (this.largeLayout ? 0.04 : this.ALPHA_DECAY);
     if (this.alpha < this.ALPHA_MIN) this.alpha = 0;
   }
 
@@ -860,18 +1208,32 @@ class ForceGraph {
   toScreen(x, y) { return { x: x * this.transform.k + this.transform.x, y: y * this.transform.k + this.transform.y }; }
   toWorld(x, y) { return { x: (x - this.transform.x) / this.transform.k, y: (y - this.transform.y) / this.transform.k }; }
 
-  fit(animated = true) {
+  fit(animated = true, useTargets = this.largeLayout, options = {}) {
     if (!this.nodes.length) return;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const n of this.nodes) { minX = Math.min(minX, n.x); minY = Math.min(minY, n.y); maxX = Math.max(maxX, n.x); maxY = Math.max(maxY, n.y); }
+    for (const node of this.nodes) {
+      const cluster = this.clusterCenters?.get(String(node.ticker || "UNKNOWN"));
+      const x = useTargets && cluster ? cluster.x + (node.type === "finance.entity" ? 0 : node.layoutDx) : node.x;
+      const y = useTargets && cluster ? cluster.y + (node.type === "finance.entity" ? 0 : node.layoutDy) : node.y;
+      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
     const w = Math.max(1, maxX - minX);
     const h = Math.max(1, maxY - minY);
-    const k = Math.max(0.2, Math.min(1.5, 0.72 * Math.min(this.width / w, this.height / h)));
+    const padding = options.padding ?? 0.9;
+    const maxZoom = options.maxZoom ?? 1.8;
+    const k = Math.max(0.025, Math.min(maxZoom, padding * Math.min(this.width / w, this.height / h)));
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const target = { k, x: this.width / 2 - cx * k, y: this.height / 2 - cy * k };
-    if (!animated) { this.transform = target; return; }
+    if (!animated) { this.transform = target; this.needsDraw = true; return; }
     this.animateTo(target);
+  }
+
+  fitLocal(animated = true) {
+    const count = this.nodes.length;
+    const maxZoom = count <= 12 ? 3 : count <= 40 ? 2.5 : count <= 120 ? 2.1 : 1.4;
+    const padding = count <= 12 ? 0.78 : count <= 40 ? 0.86 : count <= 120 ? 0.94 : 0.92;
+    this.fit(animated, false, { padding, maxZoom });
   }
 
   animateTo(target) {
@@ -883,19 +1245,21 @@ class ForceGraph {
       const t = Math.min(1, (now - t0) / dur);
       const e = easeOut(t);
       this.transform = { k: start.k + (target.k - start.k) * e, x: start.x + (target.x - start.x) * e, y: start.y + (target.y - start.y) * e };
+      this.needsDraw = true;
       if (t < 1) requestAnimationFrame(run);
     };
     requestAnimationFrame(run);
   }
 
   zoomBy(factor, cx, cy) {
-    const k = Math.max(0.15, Math.min(4, this.transform.k * factor));
+    const k = Math.max(0.025, Math.min(6, this.transform.k * factor));
     const px = cx ?? this.width / 2;
     const py = cy ?? this.height / 2;
     const world = this.toWorld(px, py);
     this.transform.k = k;
     this.transform.x = px - world.x * k;
     this.transform.y = py - world.y * k;
+    this.needsDraw = true;
   }
 
   /* ---- interaction ---- */
@@ -935,17 +1299,23 @@ class ForceGraph {
         const world = this.toWorld(p.x, p.y);
         this.pointer.dragNode.fx = world.x;
         this.pointer.dragNode.fy = world.y;
+        if (this.pointer.dragNode.type === "finance.entity") this.clusterCenters.set(String(this.pointer.dragNode.ticker || "UNKNOWN"), { x: world.x, y: world.y });
         this.reheat(0.35);
       } else if (this.pointer.panning) {
         this.transform.x += dx;
         this.transform.y += dy;
+        this.needsDraw = true;
       }
       this.pointer.lastX = p.x;
       this.pointer.lastY = p.y;
       return;
     }
     const node = this.nearest(p.x, p.y);
-    this.hoverId = node?.id || null;
+    const nextHoverId = node?.id || null;
+    if (nextHoverId !== this.hoverId) {
+      this.hoverId = nextHoverId;
+      this.needsDraw = true;
+    }
     this.canvas.style.cursor = node ? "pointer" : "grab";
   }
 
@@ -953,7 +1323,20 @@ class ForceGraph {
     this.canvas.classList.remove("grabbing");
     const wasClick = this.pointer.down && this.pointer.moved < 5;
     const node = this.pointer.dragNode;
-    if (node) { node.fx = null; node.fy = null; this.reheat(0.15); }
+    if (node) {
+      const cluster = this.clusterCenters?.get(String(node.ticker || "UNKNOWN"));
+      if (cluster && node.type !== "finance.entity") {
+        const hub = this.companyNodes?.get(String(node.ticker || "UNKNOWN"));
+        node.layoutDx = node.x - (hub?.x ?? cluster.x);
+        node.layoutDy = node.y - (hub?.y ?? cluster.y);
+      } else if (cluster && node.type === "finance.entity") {
+        cluster.x = node.x;
+        cluster.y = node.y;
+      }
+      node.fx = null;
+      node.fy = null;
+      this.reheat(0.15);
+    }
     if (wasClick && node) this.onSelect(node.id);
     this.pointer = { down: false, dragNode: null, panning: false, moved: 0, lastX: 0, lastY: 0, downX: 0, downY: 0 };
   }
@@ -961,13 +1344,24 @@ class ForceGraph {
   onWheel(event) {
     event.preventDefault();
     const p = this.eventPos(event);
-    this.zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, p.x, p.y);
+    const factor = Math.exp(Math.max(-80, Math.min(80, -event.deltaY)) * 0.0022);
+    this.zoomBy(factor, p.x, p.y);
   }
 
   /* ---- rendering ---- */
   tick() {
-    if (this.alpha > 0 || this.pointer.dragNode) this.step();
-    this.draw();
+    const now = performance.now();
+    const blooming = this.bloomEndsAt > now;
+    const moving = this.alpha > 0 || blooming || this.hasMotion || Boolean(this.pointer.dragNode);
+    if (moving) this.step();
+    if (this.pendingLocalFitAt && now >= this.pendingLocalFitAt) {
+      this.pendingLocalFitAt = 0;
+      this.fitLocal(true);
+    }
+    if (moving || this.needsDraw) {
+      this.draw();
+      this.needsDraw = false;
+    }
     requestAnimationFrame(() => this.tick());
   }
 
@@ -986,8 +1380,8 @@ class ForceGraph {
 
     // background wash
     const grad = ctx.createRadialGradient(this.width / 2, this.height / 2, 40, this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.75);
-    grad.addColorStop(0, "#181414");
-    grad.addColorStop(1, "#120f0f");
+    grad.addColorStop(0, "#181818");
+    grad.addColorStop(1, "#111111");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, this.width, this.height);
 
@@ -996,11 +1390,9 @@ class ForceGraph {
     ctx.translate(t.x, t.y);
     ctx.scale(t.k, t.k);
 
-    const focusId = this.hoverId || this.selectedId;
+    const now = performance.now();
+    const focusId = this.hoverId;
     const active = focusId ? this.neighborsOf(focusId) : null;
-    // On hover, also label neighbours — but only for a small cluster, so hubs don't spew text.
-    const hoverNeighbors = this.hoverId ? this.neighborsOf(this.hoverId) : null;
-    const labelHoverSet = hoverNeighbors && hoverNeighbors.size <= 12 ? hoverNeighbors : null;
 
     // links
     ctx.lineWidth = 1 / t.k;
@@ -1008,24 +1400,29 @@ class ForceGraph {
       const a = this.nodeById.get(link.source);
       const b = this.nodeById.get(link.target);
       if (!a || !b) continue;
+      const reveal = Math.min(this.revealProgress(a, now), this.revealProgress(b, now));
+      if (reveal <= 0.01) continue;
       const lit = active && (active.has(a.id) && active.has(b.id) && (a.id === focusId || b.id === focusId));
-      const stroke = lit ? "rgba(213,223,201,0.62)" : active ? "rgba(150,140,135,0.10)" : "rgba(150,140,135,0.22)";
+      const stroke = lit ? "rgba(213,223,201,0.72)" : active ? "rgba(150,150,150,0.035)" : "rgba(150,150,150,0.075)";
       ctx.strokeStyle = stroke;
+      ctx.globalAlpha = reveal;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
       if (link.directed || this.directed) this.drawArrowhead(ctx, a, b, stroke, t.k);
+      ctx.globalAlpha = 1;
     }
 
-    // nodes — labels fade in with zoom (Obsidian-style), plus hover/selected.
-    const showAllLabels = t.k > 1.3;
+    // Keep the graph clear: a node's name is visible only while it is hovered.
     for (const node of this.nodes) {
-      const r = this.radius(node);
+      const reveal = this.revealProgress(node, now);
+      if (reveal <= 0.01) continue;
+      const r = Math.max(this.radius(node), (node.type === "finance.entity" ? 2.8 : 0.65) / t.k);
       const selected = node.id === this.selectedId;
       const hovered = node.id === this.hoverId;
       const dim = active && !active.has(node.id);
-      ctx.globalAlpha = dim ? 0.35 : 1;
+      ctx.globalAlpha = reveal * (dim ? 0.11 : 1);
 
       if (selected || hovered) {
         ctx.beginPath();
@@ -1036,20 +1433,20 @@ class ForceGraph {
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = nodeColor(node.type);
+      ctx.fillStyle = nodeColor(node);
       ctx.fill();
-      ctx.lineWidth = (selected ? 2 : 1) / t.k;
+      ctx.lineWidth = (selected ? 2 : node.type === "finance.filing" ? 0.45 : 1) / t.k;
       ctx.strokeStyle = selected ? "#f2eee8" : "rgba(18,15,15,0.85)";
       ctx.stroke();
 
-      const labeled = selected || hovered || (labelHoverSet && labelHoverSet.has(node.id)) || showAllLabels;
+      const labeled = hovered;
       if (labeled) {
-        const fontPx = (selected || hovered ? 12 : 11) / t.k;
+        const fontPx = (selected || hovered ? 11.5 : 9) / t.k;
         ctx.font = `${selected || hovered ? 600 : 500} ${fontPx}px ${getComputedStyle(document.body).fontFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = selected ? "#f2eee8" : dim ? "rgba(130,119,114,0.6)" : "#b9aea8";
-        const label = String(node.title || node.id);
+        const label = String(node.type === "finance.entity" && !selected && !hovered ? (node.ticker || node.title) : (node.title || node.id));
         const max = selected || hovered ? 46 : 30;
         ctx.fillText(label.length > max ? label.slice(0, max) + "…" : label, node.x, node.y + r + 3 / t.k);
       }
@@ -1095,7 +1492,7 @@ function runSearch(query) {
   }
   els.searchResults.innerHTML = results.map((node) =>
     `<div class="search-item" data-id="${node.id}">
-       <span class="dot" style="background:${nodeColor(node.type)}"></span>
+       <span class="dot" style="background:${nodeColor(node)}"></span>
        <span class="st-title">${escapeHtml(node.title || node.id)}</span>
        <span class="st-type">${nodeLabel(node)}</span>
      </div>`).join("");
@@ -1104,10 +1501,15 @@ function runSearch(query) {
 
 /* ------------------------------------------------------------------ legend */
 function buildLegend() {
-  els.legend.innerHTML = Object.entries(TYPE_LABELS)
-    .filter(([type]) => !TRACE_ONLY_NODE_TYPES.has(type))
-    .map(([type, label]) =>
-      `<span class="legend-item"><span class="dot" style="background:${nodeColor(type)}"></span>${label}</span>`).join("");
+  const present = new Set(state.nodes.filter((node) => node.type === "finance.filing").map(filingForm));
+  const filingItems = Object.entries(FILING_COLORS)
+    .filter(([form]) => form !== "OTHER" ? present.has(form) : present.has("OTHER"))
+    .map(([form, color]) =>
+      `<span class="legend-item"><span class="dot" style="background:${color}"></span>${form === "OTHER" ? "Other filing" : form}</span>`);
+  els.legend.innerHTML = [
+    `<span class="legend-item"><span class="dot" style="background:${NODE_COLORS.entity}"></span>Company</span>`,
+    ...filingItems,
+  ].join("");
 }
 
 /* ------------------------------------------------------------------ events */
@@ -1197,7 +1599,8 @@ function handleGraphSelect(id) {
     if (node?.path) openDocument(node.path, node.title || stemOf(node.path), { editable: false, showMarkdown: true });
     return;
   }
-  openNode(id);
+  const node = state.nodeById.get(id);
+  openNode(id, { showMarkdown: node?.type !== "finance.entity" });
 }
 
 /* ------------------------------------------------------------------ init */
@@ -1213,7 +1616,8 @@ async function init() {
     setActiveVault({ kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" });
     toggleVaultHistory(false);
     seedChat({ title: "Vault context" });
-    const first = state.index.companies?.[0]?.id || state.nodes[0]?.id;
+    const companyFirst = state.index.companies?.[0]?.id;
+    const first = state.nodeById.has(companyFirst) ? companyFirst : state.nodes[0]?.id;
     if (first) openNode(first, { showMarkdown: false, focusGraph: false });
   } catch (error) {
     els.docRendered.textContent = error.message;
