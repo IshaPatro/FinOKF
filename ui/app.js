@@ -135,16 +135,22 @@ function nodeColor(nodeOrType) {
   return NODE_COLORS[nodeKind(type)] || NODE_COLORS.source;
 }
 const nodeLabel = (node) => node?.type === "finance.filing" ? filingForm(node) : (TYPE_LABELS[node?.type] || node?.type || "File");
-const stemOf = (path) => (path || "").split("/").pop().replace(/\.(md|ya?ml)$/i, "");
-const documentUrl = (relPath) => `../${relPath.replace(/^\.\//, "")}`;
-const pathDir = (path) => path.split("/").slice(0, -1).join("/");
+const normalizePath = (path) => String(path || "").replace(/\\/g, "/");
+const stemOf = (path) => normalizePath(path).split("/").pop().replace(/\.(md|ya?ml)$/i, "");
+const documentUrl = (relPath) => `../${normalizePath(relPath).replace(/^\.\//, "")}`;
+const pathDir = (path) => normalizePath(path).split("/").slice(0, -1).join("/");
 const isTraceOnlyNode = (node) => TRACE_ONLY_NODE_TYPES.has(node?.type);
 
 function resolveRelativePath(baseFilePath, relativePath) {
-  if (!relativePath) return "";
-  if (!relativePath.startsWith(".")) return relativePath;
+  const rel = normalizePath(relativePath);
+  if (!rel) return "";
+  // Paths returned by the server can be full workspace-relative paths; retain
+  // those while normalizing Windows separators for browser URLs.
+  if (/^(?:data|ui)\//.test(rel)) return rel;
   const parts = pathDir(baseFilePath).split("/").filter(Boolean);
-  for (const chunk of relativePath.split("/")) {
+  // Answer graph nodes store paths such as "facts/turn-001.md" relative to
+  // their graph.json. Resolve both bare and ./../ relative forms.
+  for (const chunk of rel.split("/")) {
     if (!chunk || chunk === ".") continue;
     if (chunk === "..") parts.pop();
     else parts.push(chunk);
@@ -616,7 +622,12 @@ function renderStructuredYaml(raw) {
 }
 
 function renderDocument(raw, path = "") {
-  return /\.ya?ml$/i.test(path) ? renderStructuredYaml(raw) : renderMarkdown(raw);
+  // Cache-vault snapshots created by earlier versions used the source file's
+  // .yml extension despite containing Markdown frontmatter and prose. Detect
+  // actual structured filings by content so those legacy snapshots stay
+  // readable, while real filing YAML retains the table renderer.
+  const isStructuredFiling = /\.ya?ml$/i.test(path) && !raw.startsWith("---\\n");
+  return isStructuredFiling ? renderStructuredYaml(raw) : renderMarkdown(raw);
 }
 
 /* ------------------------------------------------------------------ open / edit / save */
@@ -894,7 +905,7 @@ async function submitChat(value) {
   els.chatInput.value = "";
   els.chatInput.disabled = true;
   els.chatButton.disabled = true;
-  const pending = addChatMessage("assistant", els.methodSelect.value === "proposed" ? "Binding the clearbox cache…" : "Running the naïve local model…", "pending");
+  const pending = addChatMessage("assistant", els.methodSelect.value === "auto" ? "Checking FinOKF facts, then retrieving grounded evidence if needed…" : "Running the naïve model baseline…", "pending");
   try {
     const result = await askLocalModel(question);
     updateChatMessage(pending, result.answer || "The local model returned an empty answer.");

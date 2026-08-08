@@ -36,6 +36,7 @@ LLM_URL = "http://127.0.0.1:11434"
 LLM_MODEL = "llama3.2:3b"
 LLM_TIMEOUT = 180
 LLM_ENABLED = True
+LLM_PROVIDER = "ollama"
 FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
 
 
@@ -225,13 +226,70 @@ def gather_evidence(selected: dict, question: str, node_by_id: dict[str, dict]) 
     return chosen[:8]
 
 
-def build_prompt_context(selected: dict, evidence_nodes: list[dict]) -> str:
+def question_terms(question: str) -> list[str]:
+    """Return a small, useful keyword set for lexical filing retrieval."""
+    ignored = {"about", "after", "against", "and", "are", "between", "did", "does", "for", "from", "have", "how", "into", "its", "the", "their", "this", "was", "what", "when", "with"}
+    return [term for term in re.findall(r"[a-z]{4,}", question.lower()) if term not in ignored][:12]
+
+
+def filing_excerpt(path: str, question: str, max_chars: int = 1800) -> str:
+    """Extract a compact, query-relevant excerpt without sending an entire filing."""
+    try:
+        raw = read_processed_markdown(path)
+    except (OSError, ValueError):
+        return ""
+    terms = question_terms(question)
+    if not terms:
+        return trim_markdown_preview(raw, max_chars)
+    chunks = [chunk.strip() for chunk in re.split(r"\n\s*\n", raw) if chunk.strip()]
+    ranked = sorted(
+        ((sum(term in chunk.lower() for term in terms), position, chunk) for position, chunk in enumerate(chunks)),
+        key=lambda item: (item[0], -item[1]),
+        reverse=True,
+    )
+    selected = [chunk for score, _position, chunk in ranked if score > 0][:3]
+    return trim_markdown_preview("\n\n".join(selected), max_chars) if selected else ""
+
+
+def add_retrieval_filings(selected: dict, question: str, evidence_nodes: list[dict], node_by_id: dict[str, dict]) -> list[dict]:
+    """Add relevant company filings to the fallback LLM evidence chain."""
+    ticker = str(selected.get("ticker") or "").upper()
+    if not ticker:
+        return evidence_nodes
+    year_match = re.search(r"\b(20\d{2})\b", question)
+    wanted_year = year_match.group(1) if year_match else ""
+    candidates = [node for node in node_by_id.values() if node.get("type") == "finance.filing" and str(node.get("ticker") or "").upper() == ticker]
+    candidates.sort(
+        key=lambda node: (
+            1 if wanted_year and str((node.get("finokf") or {}).get("fiscal_year") or "") == wanted_year else 0,
+            1 if str((node.get("finokf") or {}).get("form") or "").upper() == "10-K" else 0,
+            str((node.get("finokf") or {}).get("filing_date") or ""),
+        ),
+        reverse=True,
+    )
+    seen = {str(node.get("id") or "") for node in evidence_nodes}
+    for candidate in candidates:
+        if candidate["id"] not in seen:
+            evidence_nodes.append(candidate)
+            seen.add(candidate["id"])
+        if len(evidence_nodes) >= 6:
+            break
+    return evidence_nodes
+
+
+def build_prompt_context(selected: dict, evidence_nodes: list[dict], question: str = "") -> str:
     lines = []
+    excerpted_paths: set[str] = set()
     for node in evidence_nodes:
         path = node.get("path", "")
         preview = (node.get("preview") or "").strip().replace("\n", " ")
         preview = preview[:260]
         lines.append(f"- {node.get('title', node.get('id'))} [{node.get('type')}] :: {path} :: {preview}")
+        if question and path and path not in excerpted_paths and len(excerpted_paths) < 3:
+            excerpt = filing_excerpt(str(path), question)
+            if excerpt:
+                lines.append(f"  Relevant excerpt from {path}:\n{excerpt}")
+                excerpted_paths.add(str(path))
     return "\n".join(lines)
 
 
@@ -470,6 +528,56 @@ def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     return answer, usage, model_ms
 
 
+def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
+    """Call the Responses API using the server-side OPENAI_API_KEY only."""
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set. Set it in your shell before starting the server.")
+    request_payload = {
+        "model": LLM_MODEL,
+        "instructions": system_prompt,
+        "input": user_prompt,
+        "store": False,
+    }
+    started = time.perf_counter_ns()
+    req = urlrequest.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(request_payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
+            result = json.loads(response.read() or b"{}")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"OpenAI API request failed ({exc.code}): {detail}") from exc
+    model_ms = (time.perf_counter_ns() - started) / 1_000_000
+    parts: list[str] = []
+    for item in result.get("output") or []:
+        for content in item.get("content") or []:
+            if content.get("type") in {"output_text", "text"} and content.get("text"):
+                parts.append(str(content["text"]))
+    answer = (result.get("output_text") or "\n".join(parts)).strip()
+    if not answer:
+        raise RuntimeError("OpenAI returned no text output.")
+    api_usage = result.get("usage") or {}
+    usage = {
+        "prompt_tokens": int(api_usage.get("input_tokens") or 0),
+        "completion_tokens": int(api_usage.get("output_tokens") or 0),
+        "total_tokens": int(api_usage.get("total_tokens") or 0),
+        "ollama_total_ms": 0,
+        "ollama_load_ms": 0,
+    }
+    return answer, usage, model_ms
+
+
+def call_llm(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
+    if LLM_PROVIDER == "openai":
+        return call_openai(system_prompt, user_prompt)
+    return call_ollama(system_prompt, user_prompt)
+
+
 def build_answer_trace(question: str, answer: str, selected: dict, evidence_nodes: list[dict], skill: dict[str, object]) -> dict[str, object]:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     slug = slugify(f"{selected.get('ticker', 'chat')}-{skill['name']}-{timestamp}-{short_hash(question + answer)}")
@@ -570,10 +678,32 @@ def list_answer_vaults() -> list[dict]:
 
 def build_snapshot_markdown(vault_id: str, node: dict) -> str:
     orig_rel = f"data/processed/{node['path']}"
-    preview = trim_markdown_preview(read_processed_markdown(node["path"]), 1800)
     snapshot_id = f"snapshot:{vault_id}:{node['id']}"
     title = node.get("title") or title_from_path(node["path"])
     escaped_title = title.replace('"', '\\"')
+    finokf = node.get("finokf") or {}
+    period = finokf.get("period") or {}
+
+    # Compiled FlashOKF evidence is a fact selected from the binding index, not
+    # a standalone Markdown file. Render its exact values in the snapshot so
+    # the answer-path graph is genuinely inspectable.
+    if node.get("type") == "finance.fact" and finokf.get("value") is not None:
+        fact_details = "\n".join(
+            [
+                "## Bound fact",
+                "",
+                f"- Concept: `{finokf.get('concept', 'Not available')}`",
+                f"- Stored value: `{finokf.get('value')} × {finokf.get('scale', '1')}`",
+                f"- Unit: `{finokf.get('unit', 'Not available')}`",
+                f"- Currency: `{finokf.get('currency', 'Not available')}`",
+                f"- Period: `{period.get('start') or 'instant'} → {period.get('end', 'Not available')}`",
+                f"- Fiscal period: `{period.get('fiscal_year', 'Not available')} {period.get('fiscal_period', '')}`",
+                "",
+            ]
+        )
+        preview = fact_details
+    else:
+        preview = trim_markdown_preview(read_processed_markdown(node["path"]), 1800)
     return f"""
 ---
 schema_version: "finokf-vault/1.0"
@@ -605,7 +735,7 @@ This note was included in the answer-local cache vault for `{vault_id}`.
 - Original node id: `{node['id']}`
 - Original vault path: `{orig_rel}`
 
-## Stored Preview
+## Evidence
 
 {preview}
 """
@@ -914,7 +1044,10 @@ def persist_chat_turn(
         seen_source_ids.add(source_id)
         folder = str(node.get("folder") or Path(source_path).parent.name or "notes")
         target_dir = vault_dir / (folder if folder in {"facts", "sources", "filings", "entities"} else "notes")
-        snapshot_path = target_dir / f"{turn_id}-{Path(source_path).name}"
+        # Snapshot files are Markdown wrappers even when the authoritative
+        # source is YAML. Keeping a .md extension prevents the viewer from
+        # parsing a wrapper as a complete structured filing.
+        snapshot_path = target_dir / f"{turn_id}-{Path(source_path).stem}.md"
         try:
             snapshot_text = build_snapshot_markdown(index["vault_id"], node)
         except (FileNotFoundError, KeyError):
@@ -951,7 +1084,7 @@ def persist_chat_turn(
             [
                 f"# {turn_id} Cache Program",
                 "",
-                f"- Method: `{execution.get('method', 'proposed')}`",
+                f"- Method: `{execution.get('method', 'auto')}`",
                 f"- Route: `{execution.get('route', 'llm-fallback')}`",
                 f"- Cache hit: `{str(bool(execution.get('cache_hit'))).lower()}`",
                 "",
@@ -1194,9 +1327,9 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(400, {"ok": False, "error": f"bad request: {exc}"})
             return
 
-        method = str(payload.get("method") or "proposed").lower()
-        if method not in {"naive", "proposed"}:
-            self._json(400, {"ok": False, "error": "method must be naive or proposed"})
+        method = str(payload.get("method") or "auto").lower()
+        if method not in {"auto", "naive"}:
+            self._json(400, {"ok": False, "error": "method must be auto or naive"})
             return
 
         try:
@@ -1226,10 +1359,12 @@ class Handler(SimpleHTTPRequestHandler):
         route_ms = (time.perf_counter_ns() - route_started) / 1_000_000
 
         bind_started = time.perf_counter_ns()
-        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "proposed" else {"hit": False}
+        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "auto" else {"hit": False}
         evidence_nodes = compiled.get("evidence_nodes") or gather_evidence(selected, message, node_by_id)
+        if method == "auto" and not compiled.get("hit"):
+            evidence_nodes = add_retrieval_filings(selected, message, evidence_nodes, node_by_id)
         bind_ms = (time.perf_counter_ns() - bind_started) / 1_000_000
-        evidence_context = build_prompt_context(selected, evidence_nodes)
+        evidence_context = build_prompt_context(selected, evidence_nodes, message if method == "auto" and not compiled.get("hit") else "")
 
         system_prompt = (
             "You are FinOKF's local equity research assistant. Answer only from the selected "
@@ -1262,20 +1397,20 @@ class Handler(SimpleHTTPRequestHandler):
                     },
                 )
                 return
-            if method == "proposed":
+            if method == "auto":
                 user_prompt = (
                     f"Ticker: {selected.get('ticker', 'Unknown')}\n"
-                    f"Compact bound evidence:\n{evidence_context}\n\nQuestion: {message}"
+                    f"Retrieved evidence follows. Use only this evidence; if it is insufficient, say so. "
+                    f"Cite the filing path(s) you used in a short Sources section.\n\n"
+                    f"{evidence_context}\n\nQuestion: {message}"
                 )
             try:
-                answer, usage, model_ms = call_ollama(system_prompt, user_prompt)
-            except urlerror.URLError as exc:
-                self._json(502, {"ok": False, "error": f"Ollama is not reachable at {LLM_URL}: {exc.reason}"})
-                return
+                answer, usage, model_ms = call_llm(system_prompt, user_prompt)
             except Exception as exc:
-                self._json(502, {"ok": False, "error": f"local model request failed: {exc}"})
+                provider = "OpenAI" if LLM_PROVIDER == "openai" else "Ollama"
+                self._json(502, {"ok": False, "error": f"{provider} model request failed: {exc}"})
                 return
-            route = "llm-fallback" if method == "proposed" else "naive-llm"
+            route = f"{LLM_PROVIDER}-grounded-fallback" if method == "auto" else f"{LLM_PROVIDER}-naive"
 
         before_persist_ms = (time.perf_counter_ns() - total_started) / 1_000_000
         metrics = {
@@ -1289,7 +1424,7 @@ class Handler(SimpleHTTPRequestHandler):
             "method": method,
             "route": route,
             "cache_hit": bool(compiled.get("hit")),
-            "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "naive baseline")},
+            "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "grounded fallback" if method == "auto" else "naive baseline")},
             "bindings": compiled.get("bindings") or [],
             "metrics": metrics,
         }
@@ -1352,16 +1487,17 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_TIMEOUT, LLM_URL, PROCESSED, VAULTS
+    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_PROVIDER, LLM_TIMEOUT, LLM_URL, PROCESSED, VAULTS
     parser = argparse.ArgumentParser(description="Serve the FinOKF vault viewer with markdown saving.")
     parser.add_argument("--processed-dir", default=str(DATA_ROOT / "processed"), help="Processed vault directory.")
     parser.add_argument("--index", default="ui/vault-index.json", help="Browser index JSON path.")
     parser.add_argument("--vaults-dir", default=str(DATA_ROOT / "vaults" / "answers"), help="Answer vault directory.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8770)
+    parser.add_argument("--llm-provider", choices=["ollama", "openai"], default=os.environ.get("FINOKF_LLM_PROVIDER", "ollama"), help="Fallback LLM provider.")
     parser.add_argument("--llm-url", default=os.environ.get("FINOKF_LLM_URL", LLM_URL), help="Local Ollama URL.")
-    parser.add_argument("--llm-model", default=os.environ.get("FINOKF_LLM_MODEL", LLM_MODEL), help="Ollama model name.")
-    parser.add_argument("--no-llm", action="store_true", help="Run the UI and compiled cache path without an Ollama fallback.")
+    parser.add_argument("--llm-model", default=os.environ.get("FINOKF_LLM_MODEL"), help="Provider model name (defaults by provider).")
+    parser.add_argument("--no-llm", action="store_true", help="Run the UI and FlashOKF path without a model fallback.")
     parser.add_argument(
         "--llm-timeout",
         type=int,
@@ -1374,8 +1510,9 @@ def main() -> int:
     INDEX_PATH = (ROOT / args.index).resolve()
     VAULTS = (ROOT / args.vaults_dir).resolve()
     VAULTS.mkdir(parents=True, exist_ok=True)
+    LLM_PROVIDER = args.llm_provider
     LLM_URL = args.llm_url
-    LLM_MODEL = args.llm_model
+    LLM_MODEL = args.llm_model or ("gpt-5-mini" if LLM_PROVIDER == "openai" else "llama3.2:3b")
     LLM_TIMEOUT = args.llm_timeout
     LLM_ENABLED = not args.no_llm
     server = ThreadingHTTPServer((args.host, args.port), Handler)
@@ -1384,7 +1521,7 @@ def main() -> int:
         f"FinOKF vault viewer running at:\n"
         f"    {url}\n"
         f"Editing writes to: {PROCESSED}\n"
-        f"Local AI: {f'{LLM_MODEL} at {LLM_URL}' if LLM_ENABLED else 'disabled (compiled cache only)'}\n"
+        f"LLM fallback: {f'{LLM_PROVIDER} · {LLM_MODEL}' if LLM_ENABLED else 'disabled (compiled cache only)'}\n"
         f"Answer vaults: {VAULTS}\n"
         f"Press Ctrl+C to stop."
     )
