@@ -275,7 +275,9 @@ def collect_files(
     return sorted(
         path
         for path in folder.rglob("*")
-        if path.is_file() and path.suffix.lower() in {".md", ".yml", ".yaml"}
+        if path.is_file()
+        and path.suffix.lower() in {".md", ".yml", ".yaml"}
+        and path.stat().st_size > 0
     )
 
 

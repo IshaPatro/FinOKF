@@ -34,6 +34,15 @@ Converts SEC data into Markdown and builds per-company FinOKF fact bindings for 
 python3 scripts/convert_raw_sec_to_markdown_vault.py --input-dir data/raw/sp100_sec_core --output-dir data/processed
 ```
 
+## sec2md vault
+
+Fetches the current S&P 100 universe and converts 2020–2026 primary SEC filings directly into `data/processed` without a raw-data folder. Completed companies are recorded in `data/processed/_index/company-progress.json` and skipped on later runs.
+
+```bash
+python3 -m pip install sec2md
+python3 scripts/sec2md_processor.py --tickers all
+```
+
 ## UI index
 
 Builds the graph/search index the website reads from the local processed vault.

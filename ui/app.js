@@ -22,6 +22,9 @@ const state = {
   currentPath: null,
   currentFetchPath: null,
   currentRaw: "",
+  gridSerial: 0,
+  pendingStructuredGrids: [],
+  activeGridApis: [],
   currentVault: null,
   answerGraph: null,
   answerGraphNodes: new Map(),
@@ -573,15 +576,113 @@ function flatTableRow(row) {
   return flat;
 }
 
-function structuredTable(rows, preferredColumns = []) {
-  if (!Array.isArray(rows) || !rows.length) return '<p class="empty-table">No records reported.</p>';
+function isEmptyGridValue(value) {
+  if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) return true;
+  if (typeof value !== "string") return false;
+  return new Set(["", "-", "—", "–", "n/a", "na", "null", "none"]).has(value.trim().toLowerCase());
+}
+
+function formatGridHeader(field) {
+  return String(field)
+    .replace(/\./g, " ")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function destroyStructuredGrids() {
+  for (const api of state.activeGridApis) api?.destroy?.();
+  state.activeGridApis = [];
+  state.pendingStructuredGrids = [];
+}
+
+function queueStructuredGrid(rows, preferredColumns = [], emptyText = "No records reported.") {
+  if (!Array.isArray(rows) || !rows.length) return `<p class="empty-table">${escapeHtml(emptyText)}</p>`;
   const flattened = rows.map(flatTableRow);
   const discovered = [];
   for (const row of flattened) {
     for (const key of Object.keys(row)) if (!discovered.includes(key)) discovered.push(key);
   }
-  const columns = [...preferredColumns.filter((key) => discovered.includes(key)), ...discovered.filter((key) => !preferredColumns.includes(key))];
-  return `<div class="structured-table-wrap"><table class="structured-table"><thead><tr>${columns.map((key) => `<th>${escapeHtml(key)}</th>`).join("")}</tr></thead><tbody>${flattened.map((row) => `<tr>${columns.map((key) => `<td>${escapeHtml(displayCell(row[key]))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  const visibleColumns = discovered.filter((key) => flattened.some((row) => !isEmptyGridValue(row[key])));
+  const columns = [
+    ...preferredColumns.filter((key) => visibleColumns.includes(key)),
+    ...visibleColumns.filter((key) => !preferredColumns.includes(key)),
+  ];
+  if (!columns.length) return `<p class="empty-table">${escapeHtml(emptyText)}</p>`;
+  const gridId = `structured-grid-${++state.gridSerial}`;
+  state.pendingStructuredGrids.push({ id: gridId, columns, rows: flattened });
+  return `<div class="structured-grid-frame"><div id="${gridId}" class="structured-grid ag-theme-quartz-dark"></div></div>`;
+}
+
+function mountStructuredGrids() {
+  if (!window.agGrid || !state.pendingStructuredGrids.length) return;
+  const gridConfigs = state.pendingStructuredGrids;
+  state.pendingStructuredGrids = [];
+  for (const config of gridConfigs) {
+    const element = document.getElementById(config.id);
+    if (!element) continue;
+    const hasPagination = config.rows.length > 25;
+    const visibleRowCount = Math.min(config.rows.length, 25);
+    element.style.height = `${Math.min(560, 46 + (visibleRowCount * 54) + (hasPagination ? 44 : 0))}px`;
+    const defaultFlex = (field) => (
+      /label|value|concept|source|title|dimensions|language/i.test(field) ? 1.5 : 1
+    );
+    const columnDefs = config.columns.map((field) => ({
+      field,
+      headerName: formatGridHeader(field),
+      minWidth: /fact_id|concept|source|dimensions|file_name|sha256/i.test(field) ? 220 : 140,
+      flex: defaultFlex(field),
+      cellDataType: false,
+      sortable: true,
+      filter: "agTextColumnFilter",
+      resizable: true,
+      tooltipValueGetter: (params) => displayCell(params.value),
+      valueFormatter: (params) => displayCell(params.value),
+      cellStyle: {
+        fontFamily: "var(--mono)",
+        fontSize: "11.5px",
+        lineHeight: "1.4",
+      },
+      wrapText: true,
+    }));
+    const gridOptions = {
+      theme: "legacy",
+      suppressFieldDotNotation: true,
+      columnDefs,
+      rowData: config.rows,
+      defaultColDef: {
+        cellDataType: false,
+        sortable: true,
+        filter: "agTextColumnFilter",
+        resizable: true,
+        floatingFilter: false,
+      },
+      pagination: hasPagination,
+      paginationPageSize: 25,
+      paginationPageSizeSelector: [25, 50, 100],
+      animateRows: false,
+      ensureDomOrder: true,
+      domLayout: "normal",
+      suppressCellFocus: true,
+      suppressMovableColumns: true,
+      rowHeight: 54,
+      headerHeight: 44,
+    };
+    let api = null;
+    if (typeof window.agGrid.createGrid === "function") api = window.agGrid.createGrid(element, gridOptions);
+    else if (typeof window.agGrid.Grid === "function") {
+      const legacyGrid = new window.agGrid.Grid(element, gridOptions);
+      api = gridOptions.api || legacyGrid?.api || null;
+    }
+    if (api) state.activeGridApis.push(api);
+  }
+}
+
+function renderCurrentDocument(raw, path = "") {
+  destroyStructuredGrids();
+  els.docRendered.innerHTML = renderDocument(raw, path);
+  mountStructuredGrids();
 }
 
 function renderStructuredYaml(raw) {
@@ -593,19 +694,21 @@ function renderStructuredYaml(raw) {
   const hiddenProperties = new Set(["tags", "edge_count", "graph_connections"]);
   const propertyItems = Object.entries(properties).filter(([key]) => !hiddenProperties.has(key));
   const propertyHtml = `<section class="structured-properties"><div class="property-grid">${propertyItems.map(([key, value]) => `<div class="property-item"><span>${escapeHtml(key)}</span><strong>${escapeHtml(displayCell(value))}</strong></div>`).join("")}</div>${tags.length ? `<div class="property-tags">${tags.map((tag) => `<span>${escapeHtml(displayCell(tag))}</span>`).join("")}</div>` : ""}</section>`;
-  const sourceTable = structuredTable(record.sources || [], ["role", "file_name", "sha256", "bytes"]);
+  const sourceTable = queueStructuredGrid(record.sources || [], ["role", "file_name", "sha256", "bytes"]);
   const keyFacts = (record.facts || []).filter((fact) => fact.key_fact);
-  const keyFactTable = structuredTable(keyFacts, [
-    "label", "display_value", "period.start", "period.end", "reporting_role", "concept", "unit", "dimensions", "fact_id",
+  const keyFactTable = queueStructuredGrid(keyFacts, [
+    "label", "display_value", "period.start", "period.end", "period.kind", "period.context_id",
+    "reporting_role", "concept", "unit", "dimensions", "fact_id",
   ]);
-  const factTable = structuredTable(record.facts || [], [
+  const factTable = queueStructuredGrid(record.facts || [], [
     "key_fact", "label", "display_value", "raw_value", "unit", "period.start", "period.end",
-    "period.kind", "reporting_role", "concept", "decimals", "dimensions", "is_extension", "fact_id",
+    "period.kind", "period.context_id", "reporting_role", "concept", "decimals", "dimensions", "is_extension", "fact_id",
   ]);
-  const textFactTable = structuredTable(record.text_facts || [], [
-    "label", "value", "period.start", "period.end", "reporting_role", "concept", "language", "dimensions", "is_extension", "fact_id",
+  const textFactTable = queueStructuredGrid(record.text_facts || [], [
+    "label", "value", "period.start", "period.end", "period.kind", "period.context_id",
+    "reporting_role", "concept", "language", "dimensions", "is_extension", "fact_id",
   ]);
-  const calculationTable = structuredTable(record.calculation_relationships || [], [
+  const calculationTable = queueStructuredGrid(record.calculation_relationships || [], [
     "subtotal_concept", "component_concept", "weight", "order", "statement_role",
   ]);
   const filingText = record.filing_text || {};
@@ -636,7 +739,7 @@ async function openDocument(path, title, options = {}) {
   els.docTitle.textContent = title;
   els.docTitle.title = path;
   els.docEditor.value = text;
-  els.docRendered.innerHTML = renderDocument(text, path);
+  renderCurrentDocument(text, path);
   els.docRendered.scrollTop = 0;
   setEditing(false);
   setDirty(false);
@@ -671,7 +774,7 @@ function setEditing(editing) {
   els.editToggle.textContent = editing ? "Reading" : "Edit";
   els.editToggle.classList.toggle("active", editing);
   if (editing) els.docEditor.focus();
-  else els.docRendered.innerHTML = renderDocument(els.docEditor.value, state.currentFetchPath || "");
+  else renderCurrentDocument(els.docEditor.value, state.currentFetchPath || "");
 }
 
 function setDirty(dirty) {
