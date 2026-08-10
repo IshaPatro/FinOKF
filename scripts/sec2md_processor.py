@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         description="Fetch S&P 100 primary SEC filings and convert them directly with sec2md."
     )
     parser.add_argument("--tickers", nargs="+", required=True, help='S&P 100 ticker symbols, or "all".')
-    parser.add_argument("--output-dir", default="data/processed")
+    parser.add_argument("--output-dir", default="data/raw")
     parser.add_argument("--user-agent", default=os.environ.get("SEC_USER_AGENT"))
     parser.add_argument("--max-requests-per-second", type=float, default=8.0)
     parser.add_argument("--timeout", type=float, default=30.0)

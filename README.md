@@ -51,6 +51,20 @@ Builds the graph/search index the website reads from the local processed vault.
 python3 scripts/build_vault_viewer_index.py --processed-dir data/processed --output ui/vault-index.json
 ```
 
+## Table repair
+
+Repairs malformed raw filing tables, makes declared `K/M/B/T` measurements explicit in numeric cells, and writes complete filing copies to `data/processed/filings`.
+
+```bash
+python3 scripts/fix_markdown_tables.py --input-dir data/raw/filings --output-dir data/processed/filings --tickers BLK --apply
+```
+
+For every ticker:
+
+```bash
+python3 scripts/fix_markdown_tables.py --input-dir data/raw/filings --output-dir data/processed/filings --tickers all --apply
+```
+
 ## Website
 
 Runs the backend and UI on port `8770`. Every local chat is saved as a switchable clearbox vault under `data/vaults/answers`, including its transcript, cache program, bound facts, and measurements.
