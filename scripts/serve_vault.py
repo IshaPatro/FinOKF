@@ -19,10 +19,13 @@ import json
 import os
 import re
 import time
+from collections import OrderedDict
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
 from urllib import error as urlerror
 from urllib import request as urlrequest
 from urllib.parse import urlparse
@@ -38,6 +41,9 @@ LLM_TIMEOUT = 180
 LLM_ENABLED = True
 LLM_PROVIDER = "ollama"
 FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
+RESPONSE_CACHE_SIZE = 128
+RESPONSE_LRU: OrderedDict[str, dict] = OrderedDict()
+RESPONSE_CACHE_LOCK = Lock()
 
 
 def slugify(text: str) -> str:
@@ -576,6 +582,39 @@ def call_llm(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
     if LLM_PROVIDER == "openai":
         return call_openai(system_prompt, user_prompt)
     return call_ollama(system_prompt, user_prompt)
+
+
+def response_cache_key(method: str, system_prompt: str, user_prompt: str) -> str:
+    payload = {
+        "provider": LLM_PROVIDER,
+        "model": LLM_MODEL,
+        "method": method,
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def response_cache_get(key: str) -> dict | None:
+    if RESPONSE_CACHE_SIZE <= 0:
+        return None
+    with RESPONSE_CACHE_LOCK:
+        cached = RESPONSE_LRU.get(key)
+        if cached is None:
+            return None
+        RESPONSE_LRU.move_to_end(key)
+        return deepcopy(cached)
+
+
+def response_cache_put(key: str, value: dict) -> None:
+    if RESPONSE_CACHE_SIZE <= 0:
+        return
+    with RESPONSE_CACHE_LOCK:
+        RESPONSE_LRU[key] = deepcopy(value)
+        RESPONSE_LRU.move_to_end(key)
+        while len(RESPONSE_LRU) > RESPONSE_CACHE_SIZE:
+            RESPONSE_LRU.popitem(last=False)
 
 
 def build_answer_trace(question: str, answer: str, selected: dict, evidence_nodes: list[dict], skill: dict[str, object]) -> dict[str, object]:
@@ -1384,6 +1423,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "ollama_total_ms": 0, "ollama_load_ms": 0}
         model_ms = 0.0
+        llm_cache_hit = False
+        cache_key = ""
         if compiled.get("hit"):
             answer = str(compiled["answer"])
             route = "compiled-program"
@@ -1404,12 +1445,21 @@ class Handler(SimpleHTTPRequestHandler):
                     f"Cite the filing path(s) you used in a short Sources section.\n\n"
                     f"{evidence_context}\n\nQuestion: {message}"
                 )
-            try:
-                answer, usage, model_ms = call_llm(system_prompt, user_prompt)
-            except Exception as exc:
-                provider = "OpenAI" if LLM_PROVIDER == "openai" else "Ollama"
-                self._json(502, {"ok": False, "error": f"{provider} model request failed: {exc}"})
-                return
+            cache_key = response_cache_key(method, system_prompt, user_prompt)
+            cached_response = response_cache_get(cache_key)
+            if cached_response:
+                answer = str(cached_response.get("answer") or "")
+                usage = cached_response.get("usage") or usage
+                model_ms = 0.0
+                llm_cache_hit = True
+            else:
+                try:
+                    answer, usage, model_ms = call_llm(system_prompt, user_prompt)
+                except Exception as exc:
+                    provider = "OpenAI" if LLM_PROVIDER == "openai" else "Ollama"
+                    self._json(502, {"ok": False, "error": f"{provider} model request failed: {exc}"})
+                    return
+                response_cache_put(cache_key, {"answer": answer, "usage": usage})
             route = f"{LLM_PROVIDER}-grounded-fallback" if method == "auto" else f"{LLM_PROVIDER}-naive"
 
         before_persist_ms = (time.perf_counter_ns() - total_started) / 1_000_000
@@ -1418,16 +1468,20 @@ class Handler(SimpleHTTPRequestHandler):
             "route_ms": round(route_ms, 3),
             "bind_ms": round(bind_ms, 3),
             "model_ms": round(model_ms, 3),
+            "llm_cache_hit": llm_cache_hit,
             **usage,
         }
         execution = {
             "method": method,
             "route": route,
-            "cache_hit": bool(compiled.get("hit")),
+            "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
             "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "grounded fallback" if method == "auto" else "naive baseline")},
             "bindings": compiled.get("bindings") or [],
             "metrics": metrics,
         }
+        if llm_cache_hit and isinstance(execution["program"], dict):
+            execution["program"]["response_cache_key"] = cache_key
+            execution["program"]["operation"] = "lru_cached_llm_fallback"
         try:
             vault = persist_chat_turn(
                 str(payload.get("vault_id") or "") or None,
@@ -1468,7 +1522,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "answer": answer,
                 "method": method,
                 "route": route,
-                "cache_hit": bool(compiled.get("hit")),
+                "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
                 "metrics": metrics,
                 "vault": vault,
             },
@@ -1487,7 +1541,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_PROVIDER, LLM_TIMEOUT, LLM_URL, PROCESSED, VAULTS
+    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_PROVIDER, LLM_TIMEOUT, LLM_URL, PROCESSED, RESPONSE_CACHE_SIZE, VAULTS
     parser = argparse.ArgumentParser(description="Serve the FinOKF vault viewer with markdown saving.")
     parser.add_argument("--processed-dir", default=str(DATA_ROOT / "processed"), help="Processed vault directory.")
     parser.add_argument("--index", default="ui/vault-index.json", help="Browser index JSON path.")
@@ -1504,6 +1558,12 @@ def main() -> int:
         default=int(os.environ.get("FINOKF_LLM_TIMEOUT", LLM_TIMEOUT)),
         help="Local model timeout in seconds.",
     )
+    parser.add_argument(
+        "--response-cache-size",
+        type=int,
+        default=int(os.environ.get("FINOKF_RESPONSE_CACHE_SIZE", RESPONSE_CACHE_SIZE)),
+        help="Maximum in-memory LRU entries for fallback LLM responses. Set 0 to disable.",
+    )
     args = parser.parse_args()
 
     PROCESSED = (ROOT / args.processed_dir).resolve()
@@ -1515,6 +1575,7 @@ def main() -> int:
     LLM_MODEL = args.llm_model or ("gpt-5-mini" if LLM_PROVIDER == "openai" else "llama3.2:3b")
     LLM_TIMEOUT = args.llm_timeout
     LLM_ENABLED = not args.no_llm
+    RESPONSE_CACHE_SIZE = max(0, args.response_cache_size)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f"http://{args.host}:{args.port}/ui/index.html"
     print(
@@ -1522,6 +1583,7 @@ def main() -> int:
         f"    {url}\n"
         f"Editing writes to: {PROCESSED}\n"
         f"LLM fallback: {f'{LLM_PROVIDER} · {LLM_MODEL}' if LLM_ENABLED else 'disabled (compiled cache only)'}\n"
+        f"Response LRU cache: {RESPONSE_CACHE_SIZE} entries\n"
         f"Answer vaults: {VAULTS}\n"
         f"Press Ctrl+C to stop."
     )

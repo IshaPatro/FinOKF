@@ -34,9 +34,9 @@ Converts SEC data into Markdown and builds per-company FinOKF fact bindings for 
 python3 scripts/convert_raw_sec_to_markdown_vault.py --input-dir data/raw/sp100_sec_core --output-dir data/processed
 ```
 
-LOCAL DEBUG STEPS IF AAPL/ABBV ONLY SHOWN ON GRAPH:
+### Local debug steps if only AAPL/ABBV are shown on the graph
 
-RUN:
+Run:
 
 ```bash
 .\.venv\Scripts\python.exe scripts\build_vault_viewer_index.py `
@@ -45,12 +45,35 @@ RUN:
   --output ui\vault-index.json
 ```
 
+## sec2md vault
+
+Fetches the current S&P 100 universe and converts 2020–2026 primary SEC filings directly into `data/processed` without a raw-data folder. Completed companies are recorded in `data/processed/_index/company-progress.json` and skipped on later runs.
+
+```bash
+python3 -m pip install sec2md
+python3 scripts/sec2md_processor.py --tickers all
+```
+
 ## UI index
 
 Builds the graph/search index the website reads from the local processed vault.
 
 ```bash
 python3 scripts/build_vault_viewer_index.py --processed-dir data/processed --output ui/vault-index.json
+```
+
+## Table repair
+
+Repairs malformed raw filing tables, makes declared `K/M/B/T` measurements explicit in numeric cells, and writes complete filing copies to `data/processed/filings`.
+
+```bash
+python3 scripts/fix_markdown_tables.py --input-dir data/raw/filings --output-dir data/processed/filings --tickers BLK --apply
+```
+
+For every ticker:
+
+```bash
+python3 scripts/fix_markdown_tables.py --input-dir data/raw/filings --output-dir data/processed/filings --tickers all --apply
 ```
 
 ## Website
