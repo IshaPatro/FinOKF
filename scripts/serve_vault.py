@@ -66,7 +66,27 @@ def load_browser_index() -> tuple[dict, dict[str, dict]]:
 
 
 def read_processed_markdown(rel_path: str) -> str:
-    return (PROCESSED / rel_path).read_text(encoding="utf-8", errors="replace")
+    return resolve_processed_path(rel_path).read_text(encoding="utf-8", errors="replace")
+
+
+def resolve_processed_path(rel_path: str) -> Path:
+    path = PROCESSED / rel_path
+    if path.exists():
+        return path
+
+    requested = Path(rel_path)
+    parent = PROCESSED / requested.parent
+    if parent.exists():
+        accession = re.search(r"\d{10}-\d{2}-\d{6}", requested.name)
+        if accession:
+            matches = sorted(parent.glob(f"*{accession.group(0)}*"))
+            if matches:
+                return matches[0]
+        stem_prefix = requested.stem.rsplit("-", 1)[0]
+        matches = sorted(parent.glob(f"{stem_prefix}*"))
+        if matches:
+            return matches[0]
+    return path
 
 
 def trim_markdown_preview(text: str, max_chars: int = 1200) -> str:
@@ -235,7 +255,150 @@ def gather_evidence(selected: dict, question: str, node_by_id: dict[str, dict]) 
 def question_terms(question: str) -> list[str]:
     """Return a small, useful keyword set for lexical filing retrieval."""
     ignored = {"about", "after", "against", "and", "are", "between", "did", "does", "for", "from", "have", "how", "into", "its", "the", "their", "this", "was", "what", "when", "with"}
-    return [term for term in re.findall(r"[a-z]{4,}", question.lower()) if term not in ignored][:12]
+    terms = [term for term in re.findall(r"[a-z]{4,}", question.lower()) if term not in ignored]
+    if is_investment_question(question):
+        terms.extend(
+            [
+                "revenue",
+                "sales",
+                "income",
+                "margin",
+                "cash",
+                "debt",
+                "eps",
+                "risk",
+                "competition",
+                "liquidity",
+                "capital",
+                "repurchase",
+            ]
+        )
+    deduped: list[str] = []
+    for term in terms:
+        if term not in deduped:
+            deduped.append(term)
+    return deduped[:18]
+
+
+def is_investment_question(question: str) -> bool:
+    q = question.lower()
+    return any(token in q for token in ("good stock", "invest", "investment", "buy", "hold", "sell", "valuation", "bull", "bear"))
+
+
+def strip_inline_html(text: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def structured_filing_excerpt(raw: str, question: str, max_chars: int) -> str:
+    if not raw.startswith('schema_version: "finokf-filing/'):
+        return ""
+
+    properties: dict[str, str] = {}
+    for key in ("title", "form", "fiscal_year", "filing_date", "report_date"):
+        match = re.search(rf"^\s*{key}:\s*\"?([^\"\n]+)\"?\s*$", raw, flags=re.MULTILINE)
+        if match:
+            properties[key] = match.group(1).strip()
+
+    metric_patterns = [
+        r"net sales",
+        r"revenue",
+        r"net income",
+        r"operating income",
+        r"gross margin",
+        r"earnings per share",
+        r"cash.*equivalents",
+        r"marketable securities",
+        r"total assets",
+        r"total liabilities",
+        r"term debt",
+        r"commercial paper",
+        r"research and development",
+        r"share repurchases?",
+        r"dividends?",
+    ]
+    if not is_investment_question(question):
+        metric_patterns.extend(re.escape(term) for term in question_terms(question))
+    wanted_metric = re.compile("|".join(metric_patterns), flags=re.IGNORECASE)
+
+    fact_rows: list[tuple[int, str]] = []
+    current: dict[str, str] = {}
+    label_priority = [
+        (re.compile(r"revenue|net sales", re.IGNORECASE), 90),
+        (re.compile(r"net income", re.IGNORECASE), 85),
+        (re.compile(r"operating income|gross margin", re.IGNORECASE), 80),
+        (re.compile(r"cash|marketable securities|assets|liabilities|debt|commercial paper", re.IGNORECASE), 70),
+        (re.compile(r"earnings per share|dividends?|share repurchases?", re.IGNORECASE), 60),
+        (re.compile(r"research and development", re.IGNORECASE), 50),
+    ]
+
+    def add_fact_row(fact: dict[str, str]) -> None:
+        label = fact.get("label", "")
+        if not label or not wanted_metric.search(label):
+            return
+        label_lower = label.lower()
+        if any(token in label_lower for token in ("remaining performance obligation", "contract liability revenue", "deferred revenue percentage")):
+            return
+        period = fact.get("period.end") or fact.get("period.instant") or fact.get("period.fiscal_year", "")
+        rank = 10
+        for pattern, score in label_priority:
+            if pattern.search(label):
+                rank = score
+                break
+        if "dimensions" not in fact:
+            rank += 25
+        if fact.get("key_fact", "").lower() == "true":
+            rank += 15
+        fiscal_year = str(fact.get("period.fiscal_year") or "")
+        if fiscal_year.isdigit():
+            rank += min(int(fiscal_year) - 2000, 30)
+        fact_rows.append((rank, f"- {label}: {fact.get('display_value') or fact.get('value', 'n/a')} ({period})"))
+
+    for line in raw.splitlines():
+        if line.startswith("text_facts:"):
+            break
+        if line.startswith("  - fact_id:"):
+            if current:
+                add_fact_row(current)
+            current = {}
+            continue
+        match = re.match(r"\s{4}([A-Za-z0-9_.-]+):\s*(.*)$", line)
+        if match and current is not None:
+            key, value = match.groups()
+            current[key] = value.strip().strip('"')
+            continue
+        period_match = re.match(r"\s{6}(end|instant|fiscal_year):\s*(.*)$", line)
+        if period_match and current is not None:
+            key, value = period_match.groups()
+            current[f"period.{key}"] = value.strip().strip('"')
+    if current:
+        add_fact_row(current)
+
+    text_rows: list[str] = []
+    text_pattern = re.compile(r"(risk factors?|competition|liquidity|capital resources|business|products|services)", flags=re.IGNORECASE)
+    text_section = raw.split("text_facts:", 1)[1] if "text_facts:" in raw else ""
+    text_section = text_section.split("calculation_relationships:", 1)[0]
+    for match in re.finditer(r'\n\s{4}label:\s*"([^"]+)"[\s\S]{0,900}?\n\s{4}value:\s*"((?:[^"\\]|\\.)*)"', text_section):
+        label, value = match.groups()
+        if not text_pattern.search(label) and not text_pattern.search(value):
+            continue
+        cleaned = strip_inline_html(value.encode("utf-8").decode("unicode_escape", errors="ignore"))
+        if cleaned:
+            text_rows.append(f"- {label}: {cleaned[:520]}")
+        if len(text_rows) >= 4:
+            break
+
+    header = " ".join(part for part in (properties.get("title"), properties.get("form"), properties.get("filing_date")) if part)
+    sections = [f"Structured filing summary: {header}".strip()]
+    if fact_rows:
+        ranked_rows = [row for _rank, row in sorted(fact_rows, reverse=True)]
+        sections.append("Financial highlights:\n" + "\n".join(dict.fromkeys(ranked_rows[:18])))
+    if text_rows:
+        sections.append("Business/risk snippets:\n" + "\n".join(text_rows))
+    if len(sections) == 1:
+        return ""
+    return trim_markdown_preview("\n\n".join(sections), max_chars)
 
 
 def filing_excerpt(path: str, question: str, max_chars: int = 1800) -> str:
@@ -244,6 +407,9 @@ def filing_excerpt(path: str, question: str, max_chars: int = 1800) -> str:
         raw = read_processed_markdown(path)
     except (OSError, ValueError):
         return ""
+    structured = structured_filing_excerpt(raw, question, max_chars)
+    if structured:
+        return structured
     terms = question_terms(question)
     if not terms:
         return trim_markdown_preview(raw, max_chars)
@@ -1408,7 +1574,10 @@ class Handler(SimpleHTTPRequestHandler):
         system_prompt = (
             "You are FinOKF's local equity research assistant. Answer only from the selected "
             "Markdown note and the provided evidence chain. Be concise, mention uncertainty if the "
-            "evidence is partial, and point to source notes when the user asks for provenance."
+            "evidence is partial, and point to source notes when the user asks for provenance. "
+            "For investment questions, do not provide personalized financial advice; instead give "
+            "an evidence-based bull/base/bear view from the filings and clearly name missing items "
+            "such as current price, valuation multiples, or user risk tolerance."
         )
         user_prompt = (
             f"Selected note title: {selected.get('title', 'Unknown')}\n"
@@ -1439,10 +1608,19 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 return
             if method == "auto":
+                investment_instruction = ""
+                if is_investment_question(message):
+                    investment_instruction = (
+                        "\nThis is an investment-style question. Use the retrieved filing summaries "
+                        "to synthesize a tentative view now. Discuss positives, risks, and what cannot "
+                        "be concluded without market price/valuation data. Do not merely offer to "
+                        "extract filings; the extraction has already been done.\n"
+                    )
                 user_prompt = (
                     f"Ticker: {selected.get('ticker', 'Unknown')}\n"
                     f"Retrieved evidence follows. Use only this evidence; if it is insufficient, say so. "
                     f"Cite the filing path(s) you used in a short Sources section.\n\n"
+                    f"{investment_instruction}"
                     f"{evidence_context}\n\nQuestion: {message}"
                 )
             cache_key = response_cache_key(method, system_prompt, user_prompt)
