@@ -1,2 +1,4 @@
 data
 .env
+paper
+.DS_Store
