@@ -14,6 +14,7 @@ notes and sources used for that answer.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -21,7 +22,7 @@ import re
 import time
 from collections import OrderedDict
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = Path(os.environ.get("FINOKF_DATA_ROOT", "data"))
 PROCESSED: Path = DATA_ROOT / "processed"
 VAULTS: Path = DATA_ROOT / "vaults" / "answers"
+PRICE_DAILY: Path = DATA_ROOT / "prices" / "sp100_yahoo" / "daily"
 INDEX_PATH: Path = ROOT / "ui" / "vault-index.json"
 LLM_URL = "http://127.0.0.1:11434"
 LLM_MODEL = "llama3.2:3b"
@@ -44,6 +46,18 @@ FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
 RESPONSE_CACHE_SIZE = 128
 RESPONSE_LRU: OrderedDict[str, dict] = OrderedDict()
 RESPONSE_CACHE_LOCK = Lock()
+COMMON_TICKER_ALIASES = {
+    "alphabet": "GOOGL",
+    "google": "GOOGL",
+    "amazon": "AMZN",
+    "apple": "AAPL",
+    "berkshire": "BRK.B",
+    "facebook": "META",
+    "meta": "META",
+    "microsoft": "MSFT",
+    "nvidia": "NVDA",
+    "tesla": "TSLA",
+}
 
 
 def slugify(text: str) -> str:
@@ -189,6 +203,78 @@ def score_fact(node: dict, question: str) -> int:
     if node.get("type") == "finance.fact":
         score += 1
     return score
+
+
+def is_comparison_question(question: str) -> bool:
+    q = question.lower()
+    return any(token in q for token in ("compare", "comparison", "versus", " vs ", "relative to", "against", "than"))
+
+
+def is_price_growth_question(question: str) -> bool:
+    q = question.lower()
+    growthish = any(token in q for token in ("stock growth", "stock performance", "share price", "price growth", "return", "returns", "last year"))
+    return growthish and any(token in q for token in ("stock", "share", "price", "return", "growth", "performance"))
+
+
+def company_aliases(node: dict) -> list[str]:
+    title = str(node.get("title") or "")
+    ticker = str(node.get("ticker") or "").upper()
+    aliases = [ticker.lower()] if ticker else []
+    normalized = re.sub(r"[^a-z0-9& ]+", " ", title.lower())
+    normalized = re.sub(r"\b(inc|incorporated|corp|corporation|co|company|plc|ltd|limited|class|common|stock)\b", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if normalized:
+        aliases.append(normalized)
+        first = normalized.split(" ", 1)[0]
+        if len(first) > 2 and first not in {"the", "new", "old"}:
+            aliases.append(first)
+    if ticker == "NVDA":
+        aliases.append("nvidia")
+    return list(dict.fromkeys(alias for alias in aliases if alias))
+
+
+def mentioned_company_tickers(question: str, selected: dict, node_by_id: dict[str, dict]) -> list[str]:
+    q = re.sub(r"[^a-z0-9&. ]+", " ", question.lower())
+    matches: list[tuple[int, str]] = []
+    available_price_tickers = {path.stem.upper().replace("-", ".") for path in PRICE_DAILY.glob("*.csv")} if PRICE_DAILY.exists() else set()
+    for node in node_by_id.values():
+        if node.get("type") != "finance.entity":
+            continue
+        ticker = str(node.get("ticker") or "").upper()
+        if not ticker:
+            continue
+        positions: list[int] = []
+        for alias in company_aliases(node):
+            pattern = rf"(?<![a-z0-9]){re.escape(alias.lower())}(?![a-z0-9])"
+            match = re.search(pattern, q)
+            if match:
+                positions.append(match.start())
+        if positions:
+            matches.append((min(positions), ticker))
+
+    for alias, ticker in COMMON_TICKER_ALIASES.items():
+        if ticker not in available_price_tickers and ticker not in {str(node.get("ticker") or "").upper() for node in node_by_id.values()}:
+            continue
+        match = re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", q)
+        if match:
+            matches.append((match.start(), ticker))
+
+    for price_ticker in available_price_tickers:
+        match = re.search(rf"(?<![a-z0-9]){re.escape(price_ticker.lower())}(?![a-z0-9])", q)
+        if match:
+            matches.append((match.start(), price_ticker))
+
+    selected_ticker = str(selected.get("ticker") or "").upper()
+    if selected_ticker and not matches:
+        matches.append((-1, selected_ticker))
+    elif selected_ticker and selected_ticker not in {ticker for _pos, ticker in matches} and is_comparison_question(question):
+        matches.insert(0, (-1, selected_ticker))
+
+    ordered: list[str] = []
+    for _position, ticker in sorted(matches):
+        if ticker not in ordered:
+            ordered.append(ticker)
+    return ordered[:4]
 
 
 def choose_context_node(selected: dict, node_by_id: dict[str, dict]) -> dict:
@@ -423,35 +509,96 @@ def filing_excerpt(path: str, question: str, max_chars: int = 1800) -> str:
     return trim_markdown_preview("\n\n".join(selected), max_chars) if selected else ""
 
 
+def price_csv_path(ticker: str) -> Path:
+    direct = PRICE_DAILY / f"{ticker}.csv"
+    if direct.exists():
+        return direct
+    alternate = PRICE_DAILY / f"{ticker.replace('.', '-')}.csv"
+    return alternate
+
+
+def price_growth_summary(ticker: str, days: int = 365) -> str:
+    path = price_csv_path(ticker)
+    if not path.exists():
+        return f"- {ticker}: no local price CSV found at {path}"
+
+    rows: list[dict[str, object]] = []
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                try:
+                    day = datetime.strptime(str(row.get("date") or ""), "%Y-%m-%d").date()
+                    price = float(row.get("adj_close") or row.get("close") or "")
+                except (TypeError, ValueError):
+                    continue
+                rows.append({"date": day, "price": price})
+    except OSError as exc:
+        return f"- {ticker}: could not read local price CSV: {exc}"
+
+    if len(rows) < 2:
+        return f"- {ticker}: not enough local price rows to calculate return"
+
+    rows.sort(key=lambda row: row["date"])
+    end = rows[-1]
+    target_start = end["date"] - timedelta(days=days)
+    start = next((row for row in rows if row["date"] >= target_start), rows[0])
+    start_price = float(start["price"])
+    end_price = float(end["price"])
+    if start_price == 0:
+        return f"- {ticker}: start price is zero; return cannot be calculated"
+    period_rows = [row for row in rows if start["date"] <= row["date"] <= end["date"]]
+    high = max(float(row["price"]) for row in period_rows)
+    low = min(float(row["price"]) for row in period_rows)
+    total_return = ((end_price / start_price) - 1) * 100
+    return (
+        f"- {ticker}: adjusted close moved from ${start_price:,.2f} on {start['date']} "
+        f"to ${end_price:,.2f} on {end['date']}, a {total_return:+.2f}% return. "
+        f"Period high/low adjusted closes: ${high:,.2f}/${low:,.2f}. Source: {path.as_posix()}"
+    )
+
+
+def build_price_context(tickers: list[str], question: str) -> str:
+    if not tickers or not is_price_growth_question(question):
+        return ""
+    return "Local price performance evidence:\n" + "\n".join(price_growth_summary(ticker) for ticker in tickers)
+
+
 def add_retrieval_filings(selected: dict, question: str, evidence_nodes: list[dict], node_by_id: dict[str, dict]) -> list[dict]:
     """Add relevant company filings to the fallback LLM evidence chain."""
-    ticker = str(selected.get("ticker") or "").upper()
-    if not ticker:
+    tickers = mentioned_company_tickers(question, selected, node_by_id)
+    if not tickers:
         return evidence_nodes
     year_match = re.search(r"\b(20\d{2})\b", question)
     wanted_year = year_match.group(1) if year_match else ""
-    candidates = [node for node in node_by_id.values() if node.get("type") == "finance.filing" and str(node.get("ticker") or "").upper() == ticker]
-    candidates.sort(
-        key=lambda node: (
-            1 if wanted_year and str((node.get("finokf") or {}).get("fiscal_year") or "") == wanted_year else 0,
-            1 if str((node.get("finokf") or {}).get("form") or "").upper() == "10-K" else 0,
-            str((node.get("finokf") or {}).get("filing_date") or ""),
-        ),
-        reverse=True,
-    )
     seen = {str(node.get("id") or "") for node in evidence_nodes}
-    for candidate in candidates:
-        if candidate["id"] not in seen:
-            evidence_nodes.append(candidate)
-            seen.add(candidate["id"])
-        if len(evidence_nodes) >= 6:
-            break
+    per_ticker_limit = 2 if len(tickers) > 1 else 4
+    for ticker in tickers:
+        candidates = [node for node in node_by_id.values() if node.get("type") == "finance.filing" and str(node.get("ticker") or "").upper() == ticker]
+        candidates.sort(
+            key=lambda node: (
+                1 if wanted_year and str((node.get("finokf") or {}).get("fiscal_year") or "") == wanted_year else 0,
+                1 if str((node.get("finokf") or {}).get("form") or "").upper() == "10-K" else 0,
+                str((node.get("finokf") or {}).get("filing_date") or ""),
+            ),
+            reverse=True,
+        )
+        added = 0
+        for candidate in candidates:
+            if candidate["id"] not in seen:
+                evidence_nodes.append(candidate)
+                seen.add(candidate["id"])
+                added += 1
+            if added >= per_ticker_limit:
+                break
     return evidence_nodes
 
 
-def build_prompt_context(selected: dict, evidence_nodes: list[dict], question: str = "") -> str:
+def build_prompt_context(selected: dict, evidence_nodes: list[dict], question: str = "", tickers: list[str] | None = None) -> str:
     lines = []
     excerpted_paths: set[str] = set()
+    price_context = build_price_context(tickers or [], question)
+    if price_context:
+        lines.append(price_context)
     for node in evidence_nodes:
         path = node.get("path", "")
         preview = (node.get("preview") or "").strip().replace("\n", " ")
@@ -1564,12 +1711,14 @@ class Handler(SimpleHTTPRequestHandler):
         route_ms = (time.perf_counter_ns() - route_started) / 1_000_000
 
         bind_started = time.perf_counter_ns()
-        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "auto" else {"hit": False}
+        mentioned_tickers = mentioned_company_tickers(message, selected, node_by_id)
+        allow_compiled = method == "auto" and len(mentioned_tickers) <= 1 and not is_price_growth_question(message)
+        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if allow_compiled else {"hit": False}
         evidence_nodes = compiled.get("evidence_nodes") or gather_evidence(selected, message, node_by_id)
         if method == "auto" and not compiled.get("hit"):
             evidence_nodes = add_retrieval_filings(selected, message, evidence_nodes, node_by_id)
         bind_ms = (time.perf_counter_ns() - bind_started) / 1_000_000
-        evidence_context = build_prompt_context(selected, evidence_nodes, message if method == "auto" and not compiled.get("hit") else "")
+        evidence_context = build_prompt_context(selected, evidence_nodes, message if method == "auto" and not compiled.get("hit") else "", mentioned_tickers)
 
         system_prompt = (
             "You are FinOKF's local equity research assistant. Answer only from the selected "
@@ -1577,13 +1726,15 @@ class Handler(SimpleHTTPRequestHandler):
             "evidence is partial, and point to source notes when the user asks for provenance. "
             "For investment questions, do not provide personalized financial advice; instead give "
             "an evidence-based bull/base/bear view from the filings and clearly name missing items "
-            "such as current price, valuation multiples, or user risk tolerance."
+            "such as current price, valuation multiples, or user risk tolerance. For stock-price "
+            "performance questions, use the local price performance evidence when it is present."
         )
         user_prompt = (
             f"Selected note title: {selected.get('title', 'Unknown')}\n"
             f"Selected note type: {selected.get('type', 'Unknown')}\n"
             f"Selected note path: {selected.get('path', 'Unknown')}\n"
             f"Ticker: {selected.get('ticker', 'Unknown')}\n"
+            f"Mentioned tickers: {', '.join(mentioned_tickers) or selected.get('ticker', 'Unknown')}\n"
             f"Skill path: {' -> '.join(skill['chain'])}\n\n"
             f"Selected markdown:\n{markdown}\n\n"
             f"Directional evidence chain:\n{evidence_context}\n\n"
@@ -1617,7 +1768,8 @@ class Handler(SimpleHTTPRequestHandler):
                         "extract filings; the extraction has already been done.\n"
                     )
                 user_prompt = (
-                    f"Ticker: {selected.get('ticker', 'Unknown')}\n"
+                    f"Selected ticker: {selected.get('ticker', 'Unknown')}\n"
+                    f"Mentioned tickers: {', '.join(mentioned_tickers) or selected.get('ticker', 'Unknown')}\n"
                     f"Retrieved evidence follows. Use only this evidence; if it is insufficient, say so. "
                     f"Cite the filing path(s) you used in a short Sources section.\n\n"
                     f"{investment_instruction}"
