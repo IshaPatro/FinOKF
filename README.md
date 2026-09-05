@@ -17,6 +17,16 @@ Downloads daily Yahoo Finance OHLCV, adjusted close, dividends, and splits for t
 python3 scripts/download_yahoo_prices.py --universe sp100 --output-dir data/prices/sp100_yahoo --start 2020-01-01 --end 2026-12-31 --max-requests-per-second 0.5 --skip-existing
 ```
 
+## Yahoo Finance MCP with UI
+
+The UI backend starts the Yahoo Finance MCP server on demand, so no separate MCP process or client configuration is required. Start the UI backend:
+
+```bash
+python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770 --no-llm
+```
+
+Open `http://127.0.0.1:8770/ui/index.html` and keep the answer method set to **Automatic**. Market-data requests are routed through the MCP server and recorded as `mcp-yahoo-finance` in the chat-vault trace.
+
 ## Macro layer
 
 Downloads a broad FRED macro panel from January 2020 to July 15, 2026, with one CSV per series plus metadata and a resumable manifest.
@@ -90,14 +100,26 @@ With local Ollama fallback:
 python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770 --llm-url http://127.0.0.1:11434 --llm-model llama3.2:3b
 ```
 
-With OpenAI as the grounded fallback, set the key in the server shell (never in the browser) and start the provider explicitly:
+The key button at the bottom of the left rail asks each browser tab to choose one provider: **OpenAI**, **Anthropic**, or **Local Llama**. OpenAI and Anthropic keys are kept only in that tab's JavaScript memory, sent to the local server in the chat request header, and never written to browser storage, logs, or answer vaults. Refreshing or closing the tab clears the key. Provider controls are locked while an answer is running.
+
+Start the server normally; no API key needs to be passed when launching it:
+
+```bash
+python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770
+```
+
+Environment keys and an explicit default provider remain available for headless or legacy use:
 
 ```powershell
 $env:OPENAI_API_KEY="your_api_key_here"
 .\.venv\Scripts\python.exe scripts\serve_vault.py --processed-dir data\processed --vaults-dir data\vaults\answers --host 127.0.0.1 --port 8770 --llm-provider openai --llm-model gpt-5-mini
 ```
 
-The UI defaults to **Automatic**: it first attempts deterministic FlashOKF lookup/arithmetic on simple queries, then retrieves a small set of relevant filing excerpts and calls the configured fallback model ONLY when there are no simple compiled program matches. **ollama-grounded-fallback** is then attempted, this is a lightweight local model capable of reasoning and retrieval to answer questions. **Naïve LLM** remains available as a baseline; it sends the selected note without the retrieval augmentation and returns a full online LLM response.
+Anthropic can likewise use `ANTHROPIC_API_KEY` with `--llm-provider anthropic`; its default model can be changed with `FINOKF_ANTHROPIC_MODEL`. Local Llama continues to use the configured Ollama URL and model.
+
+The UI defaults to **Automatic**. Market questions about price, returns, volume, dividends, or splits are routed through the local `finokf-yahoo-finance` MCP server and its `answer_yahoo_finance_question` tool. The backend starts the MCP process on demand, performs the MCP `initialize` handshake, calls the tool over stdio, and records `mcp-yahoo-finance` in the visible chat-vault trace.
+
+For filing questions, Automatic first attempts deterministic FlashOKF lookup/arithmetic, then retrieves relevant filing excerpts and calls the configured fallback model when no compiled program matches. **Naïve LLM** remains available as a baseline and intentionally bypasses MCP and retrieval.
 
 Open:
 

@@ -4,7 +4,7 @@ Local viewer server for the FinOKF Markdown vault.
 
 Serves the ``ui/`` app and the ``data/processed/`` vault over HTTP. The server exposes
 ``POST /api/save`` so the browser can write edited Markdown back to disk, and ``POST /api/chat``
-so the browser can ask a local Ollama model about the selected note.
+so the browser can ask OpenAI, Anthropic, or a local Ollama model about the selected note.
 
 The chat endpoint also materializes an answer-local cache vault under ``data/vaults/``. Each vault
 stores the answer, a simple claim record, a compact skill trace, and snapshot notes for the exact
@@ -18,6 +18,8 @@ import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 from collections import OrderedDict
 from copy import deepcopy
@@ -40,10 +42,20 @@ LLM_MODEL = "llama3.2:3b"
 LLM_TIMEOUT = 180
 LLM_ENABLED = True
 LLM_PROVIDER = "ollama"
+OPENAI_MODEL = os.environ.get("FINOKF_OPENAI_MODEL", "gpt-5-mini")
+ANTHROPIC_MODEL = os.environ.get("FINOKF_ANTHROPIC_MODEL", "claude-sonnet-5")
+OLLAMA_MODEL = os.environ.get("FINOKF_OLLAMA_MODEL", "llama3.2:3b")
+YAHOO_MCP_SCRIPT = ROOT / "scripts" / "yahoo_finance_mcp.py"
+YAHOO_MCP_TIMEOUT = int(os.environ.get("FINOKF_YAHOO_MCP_TIMEOUT", "120"))
+YAHOO_RESULT_CACHE_TTL = int(os.environ.get("FINOKF_YAHOO_CACHE_TTL", "300"))
+YAHOO_MAX_REQUESTS_PER_SECOND = max(0.1, float(os.environ.get("YAHOO_MAX_REQUESTS_PER_SECOND", "1")))
 FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
 RESPONSE_CACHE_SIZE = 128
 RESPONSE_LRU: OrderedDict[str, dict] = OrderedDict()
 RESPONSE_CACHE_LOCK = Lock()
+YAHOO_RESULT_CACHE: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+YAHOO_RESULT_CACHE_LOCK = Lock()
+YAHOO_NEXT_FETCH_AT = 0.0
 
 
 def slugify(text: str) -> str:
@@ -108,6 +120,19 @@ def top_scalar(markdown: str, key: str) -> str | None:
 
 def classify_skill(question: str) -> dict[str, object]:
     q = question.lower()
+    market_decision = market_data_agent_decision(question)
+    if market_decision["requires_yahoo"]:
+        return {
+            "name": "yahoo-market-data",
+            "label": "Yahoo market data",
+            "chain": [
+                "delegator",
+                "agent:market-data-router",
+                "mcp:finokf-yahoo-finance",
+                "agent:main-answer",
+            ],
+            "reason": market_decision["reason"],
+        }
     if any(token in q for token in ("margin", "gross margin", "operating margin")):
         return {
             "name": "margin-lookup",
@@ -142,6 +167,299 @@ def classify_skill(question: str) -> dict[str, object]:
         "chain": ["delegator", "markdown-traversal", "source-lookup"],
         "reason": "The question is best handled by traversing the current note and its linked evidence.",
     }
+
+
+def market_data_agent_decision(question: str) -> dict[str, object]:
+    """Return the dedicated market-data agent's routing decision."""
+    q = question.lower()
+    direct_terms = (
+        "stock price",
+        "share price",
+        "market price",
+        "price history",
+        "historical price",
+        "closing price",
+        "adjusted close",
+        "stock return",
+        "price return",
+        "total return",
+        "stock performance",
+        "share performance",
+        "trading volume",
+        "traded volume",
+        "dividend",
+        "stock split",
+        "market cap",
+        "market capitalization",
+        "enterprise value",
+        "worth",
+        "valued at",
+        "valuation multiple",
+        "price-to-earnings",
+        "p/e",
+    )
+    matched_term = next((term for term in direct_terms if term in q), "")
+    if matched_term:
+        return {
+            "agent": "market-data-router",
+            "requires_yahoo": True,
+            "intent": "valuation" if matched_term in {"market cap", "market capitalization", "enterprise value", "worth", "valued at", "valuation multiple", "price-to-earnings", "p/e"} else "market-data",
+            "reason": f"The market-data agent matched the market intent '{matched_term}'.",
+        }
+    if re.search(r"\b(quote|ytd|year[ -]to[ -]date)\b", q):
+        return {
+            "agent": "market-data-router",
+            "requires_yahoo": True,
+            "intent": "market-data",
+            "reason": "The market-data agent matched a quote or market-period request.",
+        }
+    performance_word = re.search(r"\b(perform|performed|performance|gain|gained|loss|lost)\b", q)
+    market_window = re.search(r"\b(today|current|latest|week|month|year|days?|months?|years?|since)\b", q)
+    if performance_word and market_window:
+        return {
+            "agent": "market-data-router",
+            "requires_yahoo": True,
+            "intent": "performance",
+            "reason": "The market-data agent matched a performance request with a market time window.",
+        }
+    return {
+        "agent": "market-data-router",
+        "requires_yahoo": False,
+        "intent": "filing-data",
+        "reason": "No market-price, valuation, return, volume, dividend, or split data is required.",
+    }
+
+
+def is_yahoo_market_question(question: str) -> bool:
+    """Compatibility wrapper for the market-data routing agent."""
+    return bool(market_data_agent_decision(question)["requires_yahoo"])
+
+
+def question_has_explicit_security(question: str) -> bool:
+    aliases = (
+        "alphabet",
+        "amazon",
+        "amd",
+        "apple",
+        "berkshire",
+        "bitcoin",
+        "broadcom",
+        "costco",
+        "ethereum",
+        "google",
+        "jpmorgan",
+        "meta",
+        "microsoft",
+        "netflix",
+        "nvidia",
+        "oracle",
+        "palantir",
+        "salesforce",
+        "tesla",
+        "walmart",
+    )
+    lowered = question.lower()
+    if any(re.search(rf"\b{alias}\b", lowered) for alias in aliases):
+        return True
+    if re.search(r"\$[A-Za-z][A-Za-z0-9.=-]{0,9}\b", question):
+        return True
+    ignored = {"AI", "API", "EPS", "ETF", "FY", "MCP", "PE", "Q1", "Q2", "Q3", "Q4", "SEC", "USD", "YTD"}
+    return any(token not in ignored for token in re.findall(r"\b[A-Z][A-Z0-9.=-]{0,9}\b", question))
+
+
+def mcp_frame(message: dict) -> bytes:
+    body = json.dumps(message, separators=(",", ":")).encode("utf-8")
+    return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+
+
+def parse_mcp_frames(data: bytes) -> list[dict]:
+    messages: list[dict] = []
+    offset = 0
+    while offset < len(data):
+        header_end = data.find(b"\r\n\r\n", offset)
+        if header_end < 0:
+            break
+        headers = data[offset:header_end].decode("ascii", errors="replace")
+        length_match = re.search(r"(?im)^Content-Length:\s*(\d+)\s*$", headers)
+        if not length_match:
+            raise RuntimeError("Yahoo MCP returned a response without Content-Length.")
+        length = int(length_match.group(1))
+        body_start = header_end + 4
+        body_end = body_start + length
+        if body_end > len(data):
+            raise RuntimeError("Yahoo MCP returned an incomplete response.")
+        messages.append(json.loads(data[body_start:body_end].decode("utf-8")))
+        offset = body_end
+    return messages
+
+
+def call_yahoo_mcp(question: str, ticker: str = "") -> tuple[dict, float]:
+    """Launch the local MCP server and call its question-oriented tool over stdio."""
+    arguments = {"question": question}
+    if ticker:
+        arguments["ticker"] = ticker
+    input_bytes = b"".join(
+        [
+            mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "finokf-ui-agent", "version": "0.1.0"},
+                    },
+                }
+            ),
+            mcp_frame({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "answer_yahoo_finance_question", "arguments": arguments},
+                }
+            ),
+        ]
+    )
+    started = time.perf_counter_ns()
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(YAHOO_MCP_SCRIPT)],
+            input=input_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=YAHOO_MCP_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Yahoo MCP timed out after {YAHOO_MCP_TIMEOUT} seconds.") from exc
+    elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
+    if completed.returncode != 0:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"Yahoo MCP exited with code {completed.returncode}: {detail or 'no error output'}")
+
+    response = next((item for item in parse_mcp_frames(completed.stdout) if item.get("id") == 2), None)
+    if not response:
+        raise RuntimeError("Yahoo MCP did not return a tools/call response.")
+    if response.get("error"):
+        raise RuntimeError(str((response["error"] or {}).get("message") or "Yahoo MCP tool call failed."))
+    content = ((response.get("result") or {}).get("content") or [])
+    text_content = next((item.get("text") for item in content if item.get("type") == "text"), None)
+    if not text_content:
+        raise RuntimeError("Yahoo MCP returned no text content.")
+    return json.loads(text_content), elapsed_ms
+
+
+def yahoo_result_tickers(market_result: dict, ticker_hint: str = "") -> list[str]:
+    tickers: list[str] = []
+    for item in market_result.get("data") or []:
+        summary = item.get("summary") if isinstance(item, dict) else {}
+        ticker = str((summary or {}).get("ticker") or "").strip().upper()
+        if ticker and ticker not in tickers:
+            tickers.append(ticker)
+    fallback = ticker_hint.strip().upper()
+    if fallback and fallback not in tickers:
+        tickers.append(fallback)
+    return tickers
+
+
+def yahoo_source_url(market_result: dict, ticker_hint: str = "") -> str:
+    tickers = yahoo_result_tickers(market_result, ticker_hint)
+    return f"https://finance.yahoo.com/quote/{tickers[0]}/" if tickers else "https://finance.yahoo.com/"
+
+
+def answer_with_yahoo_source(market_result: dict, ticker_hint: str = "") -> str:
+    answer = str(market_result.get("answer") or "Yahoo Finance returned no answer.").strip()
+    return ensure_yahoo_source(answer, market_result, ticker_hint)
+
+
+def ensure_yahoo_source(answer: str, market_result: dict, ticker_hint: str = "") -> str:
+    """Attach MCP provenance when the main answer used Yahoo evidence."""
+    window = market_result.get("window") or {}
+    as_of = str(window.get("end") or "the latest available trading date")
+    source_url = yahoo_source_url(market_result, ticker_hint)
+    if source_url in answer:
+        return answer
+    return (
+        f"{answer}\n\n## Sources\n\n"
+        f"- [Yahoo Finance]({source_url}) via `finokf-yahoo-finance` MCP "
+        f"(`answer_yahoo_finance_question`); data through {as_of}."
+    )
+
+
+def yahoo_evidence_node(question: str, market_result: dict, ticker_hint: str = "") -> dict:
+    tickers = yahoo_result_tickers(market_result, ticker_hint)
+    ticker_label = ", ".join(tickers)
+    source_url = yahoo_source_url(market_result, ticker_hint)
+    source_payload = json.dumps(market_result, sort_keys=True, separators=(",", ":"))
+    return {
+        "id": f"source:yahoo-finance:{short_hash(question + source_payload)}",
+        "title": f"Yahoo Finance · {ticker_label}" if ticker_label else "Yahoo Finance",
+        "type": "finance.source",
+        "folder": "sources",
+        "path": "",
+        "preview": str(market_result.get("answer") or "Yahoo Finance market data"),
+        "finokf": {
+            "provider": "Yahoo Finance",
+            "mcp_server": "finokf-yahoo-finance",
+            "mcp_tool": "answer_yahoo_finance_question",
+            "question": question,
+            "tickers": tickers,
+            "window": market_result.get("window") or {},
+            "interval": market_result.get("interval"),
+            "source_url": source_url,
+            "result": market_result,
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+
+
+def run_market_data_agent(question: str, selected_ticker: str = "") -> tuple[dict, float]:
+    """Route a question, fetch required Yahoo evidence, and prepare a main-agent handoff."""
+    global YAHOO_NEXT_FETCH_AT
+    decision = market_data_agent_decision(question)
+    if not decision["requires_yahoo"]:
+        return {"decision": decision, "result": None, "evidence_nodes": []}, 0.0
+
+    ticker_hint = "" if question_has_explicit_security(question) else selected_ticker.strip().upper()
+    normalized_question = re.sub(r"\s+", " ", question.strip().lower())
+    cache_key = hashlib.sha256(f"{normalized_question}\0{ticker_hint}".encode("utf-8")).hexdigest()
+    cache_hit = False
+    with YAHOO_RESULT_CACHE_LOCK:
+        cached = YAHOO_RESULT_CACHE.get(cache_key)
+        now = time.monotonic()
+        if cached and now - cached[0] <= YAHOO_RESULT_CACHE_TTL:
+            market_result = deepcopy(cached[1])
+            YAHOO_RESULT_CACHE.move_to_end(cache_key)
+            elapsed_ms = 0.0
+            cache_hit = True
+        else:
+            if cached:
+                YAHOO_RESULT_CACHE.pop(cache_key, None)
+            # Keep the fetch under one server-wide lock. The MCP process has
+            # its own retry/backoff; this adds pacing across subprocesses so
+            # concurrent or sequential UI requests share one rate limit.
+            wait_seconds = max(0.0, YAHOO_NEXT_FETCH_AT - time.monotonic())
+            if wait_seconds:
+                time.sleep(wait_seconds)
+            YAHOO_NEXT_FETCH_AT = time.monotonic() + (1.0 / YAHOO_MAX_REQUESTS_PER_SECOND)
+            market_result, elapsed_ms = call_yahoo_mcp(question, ticker_hint)
+            YAHOO_RESULT_CACHE[cache_key] = (time.monotonic(), deepcopy(market_result))
+            while len(YAHOO_RESULT_CACHE) > 64:
+                YAHOO_RESULT_CACHE.popitem(last=False)
+    return (
+        {
+            "decision": decision,
+            "ticker_hint": ticker_hint,
+            "cache_key": cache_key,
+            "cache_hit": cache_hit,
+            "result": market_result,
+            "evidence_nodes": [yahoo_evidence_node(question, market_result, ticker_hint)],
+        },
+        elapsed_ms,
+    )
 
 
 def edge_targets(node: dict, rels: set[str] | None = None) -> list[str]:
@@ -457,6 +775,13 @@ def build_prompt_context(selected: dict, evidence_nodes: list[dict], question: s
         preview = (node.get("preview") or "").strip().replace("\n", " ")
         preview = preview[:260]
         lines.append(f"- {node.get('title', node.get('id'))} [{node.get('type')}] :: {path} :: {preview}")
+        finokf = node.get("finokf") or {}
+        if finokf.get("mcp_server") and finokf.get("result"):
+            result_json = json.dumps(finokf["result"], indent=2, sort_keys=True, default=str)
+            lines.append(
+                "  Structured Yahoo Finance MCP evidence for the main answer agent:\n"
+                f"{result_json[:6000]}"
+            )
         if question and path and path not in excerpted_paths and len(excerpted_paths) < 3:
             excerpt = filing_excerpt(str(path), question)
             if excerpt:
@@ -669,9 +994,9 @@ def compile_flashokf(question: str, ticker: str) -> dict:
     }
 
 
-def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
+def call_ollama(system_prompt: str, user_prompt: str, model: str | None = None) -> tuple[str, dict, float]:
     request_payload = {
-        "model": LLM_MODEL,
+        "model": model or OLLAMA_MODEL,
         "stream": False,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -700,13 +1025,18 @@ def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     return answer, usage, model_ms
 
 
-def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
-    """Call the Responses API using the server-side OPENAI_API_KEY only."""
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set. Set it in your shell before starting the server.")
+def call_openai(
+    system_prompt: str,
+    user_prompt: str,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> tuple[str, dict, float]:
+    """Call the Responses API with a request-only key or the server environment fallback."""
+    resolved_key = (api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
+    if not resolved_key:
+        raise RuntimeError("No OpenAI API key was provided.")
     request_payload = {
-        "model": LLM_MODEL,
+        "model": model or OPENAI_MODEL,
         "instructions": system_prompt,
         "input": user_prompt,
         "store": False,
@@ -715,7 +1045,7 @@ def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     req = urlrequest.Request(
         "https://api.openai.com/v1/responses",
         data=json.dumps(request_payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {resolved_key}"},
         method="POST",
     )
     try:
@@ -744,16 +1074,89 @@ def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     return answer, usage, model_ms
 
 
-def call_llm(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
-    if LLM_PROVIDER == "openai":
-        return call_openai(system_prompt, user_prompt)
-    return call_ollama(system_prompt, user_prompt)
+def call_anthropic(
+    system_prompt: str,
+    user_prompt: str,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> tuple[str, dict, float]:
+    """Call Anthropic Messages with a request-only key or the server environment fallback."""
+    resolved_key = (api_key or os.environ.get("ANTHROPIC_API_KEY", "")).strip()
+    if not resolved_key:
+        raise RuntimeError("No Anthropic API key was provided.")
+    request_payload = {
+        "model": model or ANTHROPIC_MODEL,
+        "max_tokens": 2048,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    started = time.perf_counter_ns()
+    req = urlrequest.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps(request_payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-Api-Key": resolved_key,
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
+            result = json.loads(response.read() or b"{}")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"Anthropic API request failed ({exc.code}): {detail}") from exc
+    model_ms = (time.perf_counter_ns() - started) / 1_000_000
+    answer = "\n".join(
+        str(item.get("text") or "")
+        for item in result.get("content") or []
+        if item.get("type") == "text"
+    ).strip()
+    if not answer:
+        raise RuntimeError("Anthropic returned no text output.")
+    api_usage = result.get("usage") or {}
+    usage = {
+        "prompt_tokens": int(api_usage.get("input_tokens") or 0),
+        "completion_tokens": int(api_usage.get("output_tokens") or 0),
+        "total_tokens": int(api_usage.get("input_tokens") or 0) + int(api_usage.get("output_tokens") or 0),
+        "ollama_total_ms": 0,
+        "ollama_load_ms": 0,
+    }
+    return answer, usage, model_ms
 
 
-def response_cache_key(method: str, system_prompt: str, user_prompt: str) -> str:
+def provider_model(provider: str) -> str:
+    if provider == LLM_PROVIDER:
+        return LLM_MODEL
+    if provider == "openai":
+        return OPENAI_MODEL
+    if provider == "anthropic":
+        return ANTHROPIC_MODEL
+    return OLLAMA_MODEL
+
+
+def call_llm(
+    system_prompt: str,
+    user_prompt: str,
+    provider: str | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> tuple[str, dict, float]:
+    selected_provider = provider or LLM_PROVIDER
+    selected_model = model or provider_model(selected_provider)
+    if selected_provider == "openai":
+        return call_openai(system_prompt, user_prompt, api_key, selected_model)
+    if selected_provider == "anthropic":
+        return call_anthropic(system_prompt, user_prompt, api_key, selected_model)
+    return call_ollama(system_prompt, user_prompt, selected_model)
+
+
+def response_cache_key(method: str, system_prompt: str, user_prompt: str, provider: str | None = None, model: str | None = None) -> str:
+    selected_provider = provider or LLM_PROVIDER
     payload = {
-        "provider": LLM_PROVIDER,
-        "model": LLM_MODEL,
+        "provider": selected_provider,
+        "model": model or provider_model(selected_provider),
         "method": method,
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
@@ -863,6 +1266,97 @@ def write_vault_markdown(path: Path, content: str) -> None:
     path.write_text(content.strip() + "\n", encoding="utf-8")
 
 
+def normalized_source_path(value: str) -> str:
+    path = str(value or "").replace("\\", "/").strip()
+    return re.sub(r"^data/processed/", "", path)
+
+
+def evidence_cache_identity(node: dict) -> str:
+    cache = node.get("cache") or {}
+    if cache.get("identity"):
+        return str(cache["identity"])
+    source_id = str(node.get("source_id") or node.get("id") or "")
+    source_path = normalized_source_path(str(node.get("source_path") or node.get("path") or ""))
+    if node.get("type") == "finance.fact":
+        return f"fact:{source_id}"
+    if source_path:
+        return f"source:{source_path}"
+    finokf = node.get("finokf") or {}
+    source_url = str(finokf.get("source_url") or "")
+    if source_url:
+        return f"source:{source_url}"
+    return f"node:{source_id}"
+
+
+def evidence_content_hash(node: dict) -> str:
+    finokf = node.get("finokf") or {}
+    if node.get("type") == "finance.fact" or finokf.get("mcp_server"):
+        stable_finokf = {key: value for key, value in finokf.items() if key not in {"retrieved_at", "question"}}
+        content = json.dumps(stable_finokf, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    else:
+        source_path = normalized_source_path(str(node.get("path") or node.get("source_path") or ""))
+        try:
+            content = resolve_processed_path(source_path).read_bytes()
+        except OSError:
+            content = str(node.get("preview") or "").encode("utf-8")
+    return "sha256:" + hashlib.sha256(content).hexdigest()
+
+
+def dedupe_cached_nodes(nodes: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+    unique: list[dict] = []
+    by_identity: dict[str, dict] = {}
+    for node in nodes:
+        identity = evidence_cache_identity(node)
+        if not identity or identity == "node:":
+            unique.append(node)
+            continue
+        existing = by_identity.get(identity)
+        if existing is None:
+            cache = dict(node.get("cache") or {})
+            cache.setdefault("identity", identity)
+            cache.setdefault("key", "sha256:" + hashlib.sha256(identity.encode("utf-8")).hexdigest())
+            cache.setdefault("use_count", 1)
+            node["cache"] = cache
+            by_identity[identity] = node
+            unique.append(node)
+            continue
+        existing_cache = existing.setdefault("cache", {})
+        duplicate_cache = node.get("cache") or {}
+        existing_cache["use_count"] = int(existing_cache.get("use_count") or 1) + int(duplicate_cache.get("use_count") or 1)
+        if str(duplicate_cache.get("last_used_at") or "") > str(existing_cache.get("last_used_at") or ""):
+            for field in ("last_used_at", "last_turn", "status", "content_hash"):
+                if duplicate_cache.get(field) is not None:
+                    existing_cache[field] = duplicate_cache[field]
+    return unique, by_identity
+
+
+def evidence_snapshot_folder(node: dict, source_path: str) -> str:
+    by_type = {
+        "finance.fact": "facts",
+        "finance.source": "sources",
+        "finance.filing": "filings",
+        "finance.entity": "entities",
+    }
+    return by_type.get(str(node.get("type") or ""), str(node.get("folder") or (Path(source_path).parent.name if source_path else "notes")))
+
+
+def cache_metadata_markdown(node: dict) -> str:
+    cache = node.get("cache") or {}
+    return "\n".join(
+        [
+            "## Evidence cache",
+            "",
+            f"- Status: `{cache.get('status', 'miss')}`",
+            f"- Cache key: `{cache.get('key', 'Not available')}`",
+            f"- Content hash: `{cache.get('content_hash', 'Not available')}`",
+            f"- First cached: `{cache.get('first_cached_at', 'Not available')}`",
+            f"- Last used: `{cache.get('last_used_at', 'Not available')}`",
+            f"- Use count: `{cache.get('use_count', 1)}`",
+            f"- Last turn: `{cache.get('last_turn', 'Not available')}`",
+        ]
+    )
+
+
 def list_answer_vaults() -> list[dict]:
     items: list[dict] = []
     if not VAULTS.exists():
@@ -882,6 +1376,56 @@ def list_answer_vaults() -> list[dict]:
 
 
 def build_snapshot_markdown(vault_id: str, node: dict) -> str:
+    if not node.get("path"):
+        title = str(node.get("title") or "External source")
+        escaped_title = title.replace('"', '\\"')
+        finokf = node.get("finokf") or {}
+        result = finokf.get("result") or {}
+        window = finokf.get("window") or {}
+        return f"""
+---
+schema_version: "finokf-vault/1.0"
+type: {node.get("type", "finance.source")}
+id: "snapshot:{vault_id}:{node['id']}"
+title: "{escaped_title}"
+tags:
+  - finokf/cache-vault
+  - source/yahoo-finance
+graph:
+  authoritative: false
+vault:
+  snapshot_of: "{node['id']}"
+---
+
+# {title}
+
+{cache_metadata_markdown(node)}
+
+## MCP provenance
+
+- Provider: [{finokf.get('provider', 'Yahoo Finance')}]({finokf.get('source_url', 'https://finance.yahoo.com/')})
+- MCP server: `{finokf.get('mcp_server', 'finokf-yahoo-finance')}`
+- MCP tool: `{finokf.get('mcp_tool', 'answer_yahoo_finance_question')}`
+- Tickers: `{', '.join(finokf.get('tickers') or []) or 'Not available'}`
+- Window: `{window.get('start', 'Not available')} → {window.get('end', 'Not available')}`
+- Interval: `{finokf.get('interval') or 'Not available'}`
+- Retrieved at: `{finokf.get('retrieved_at', 'Not available')}`
+
+## Question
+
+{finokf.get('question', '')}
+
+## Returned answer
+
+{node.get('preview', '')}
+
+## Structured evidence
+
+```json
+{json.dumps(result, indent=2, sort_keys=True)}
+```
+"""
+
     orig_rel = f"data/processed/{node['path']}"
     snapshot_id = f"snapshot:{vault_id}:{node['id']}"
     title = node.get("title") or title_from_path(node["path"])
@@ -934,6 +1478,8 @@ vault:
 ## Cache Vault Snapshot
 
 This note was included in the answer-local cache vault for `{vault_id}`.
+
+{cache_metadata_markdown(node)}
 
 ## Origin
 
@@ -1239,40 +1785,106 @@ def persist_chat_turn(
         index["title"] = question[:72] or index.get("title", "New chat")
         index["ticker"] = selected.get("ticker", "")
 
+    all_nodes, cached_by_identity = dedupe_cached_nodes(list(index.get("nodes") or []))
     snapshots: list[dict] = []
-    seen_source_ids: set[str] = set()
+    seen_cache_identities: set[str] = set()
+    evidence_cache_hits = 0
+    evidence_cache_misses = 0
+    evidence_cache_refreshes = 0
     for node in evidence_nodes:
         source_id = str(node.get("id") or "")
         source_path = str(node.get("path") or "")
-        if not source_id or not source_path or source_id in seen_source_ids:
+        is_inline_source = bool((node.get("finokf") or {}).get("mcp_server"))
+        identity = evidence_cache_identity(node)
+        if not source_id or identity in seen_cache_identities or (not source_path and not is_inline_source):
             continue
-        seen_source_ids.add(source_id)
-        folder = str(node.get("folder") or Path(source_path).parent.name or "notes")
+        seen_cache_identities.add(identity)
+        content_hash = evidence_content_hash(node)
+        cached = cached_by_identity.get(identity)
+        if cached is None:
+            cache_status = "miss"
+            evidence_cache_misses += 1
+            cache = {
+                "identity": identity,
+                "key": "sha256:" + hashlib.sha256(identity.encode("utf-8")).hexdigest(),
+                "content_hash": content_hash,
+                "first_cached_at": timestamp,
+                "last_used_at": timestamp,
+                "use_count": 1,
+                "last_turn": turn_number,
+                "status": cache_status,
+            }
+            source_ref = f"data/processed/{source_path}" if source_path else str((node.get("finokf") or {}).get("source_url") or "")
+            cached = {
+                "id": f"snapshot:cache:{short_hash(identity)}",
+                "title": node.get("title", source_id),
+                "type": node.get("type", "finance.note"),
+                "path": "",
+                "source_id": source_id,
+                "source_path": source_ref,
+                "cache": cache,
+            }
+            all_nodes.append(cached)
+            cached_by_identity[identity] = cached
+        else:
+            cache = dict(cached.get("cache") or {})
+            old_hash = str(cache.get("content_hash") or "")
+            cache_status = "hit" if old_hash == content_hash else "refreshed"
+            if cache_status == "hit":
+                evidence_cache_hits += 1
+            else:
+                evidence_cache_refreshes += 1
+            cache.update(
+                {
+                    "identity": identity,
+                    "key": cache.get("key") or "sha256:" + hashlib.sha256(identity.encode("utf-8")).hexdigest(),
+                    "content_hash": content_hash,
+                    "first_cached_at": cache.get("first_cached_at") or index.get("created_at") or timestamp,
+                    "last_used_at": timestamp,
+                    "use_count": int(cache.get("use_count") or 1) + 1,
+                    "last_turn": turn_number,
+                    "status": cache_status,
+                }
+            )
+            cached.update(
+                {
+                    "title": node.get("title", cached.get("title", source_id)),
+                    "type": node.get("type", cached.get("type", "finance.note")),
+                    "source_path": f"data/processed/{source_path}" if source_path else str((node.get("finokf") or {}).get("source_url") or cached.get("source_path") or ""),
+                    "cache": cache,
+                }
+            )
+
+        folder = evidence_snapshot_folder(node, source_path)
         target_dir = vault_dir / (folder if folder in {"facts", "sources", "filings", "entities"} else "notes")
         # Snapshot files are Markdown wrappers even when the authoritative
         # source is YAML. Keeping a .md extension prevents the viewer from
         # parsing a wrapper as a complete structured filing.
-        snapshot_path = target_dir / f"{turn_id}-{Path(source_path).stem}.md"
+        if cached.get("path"):
+            candidate_path = (ROOT / str(cached["path"])).resolve()
+            if candidate_path == ROOT or ROOT in candidate_path.parents:
+                snapshot_path = candidate_path
+            else:
+                fallback_stem = slugify(str(node.get("title") or source_id))
+                snapshot_path = target_dir / f"{fallback_stem}-{short_hash(identity)}.md"
+            cached["path"] = vault_web_path(snapshot_path)
+        else:
+            snapshot_stem = Path(source_path).stem if source_path else slugify(str(node.get("title") or source_id))
+            snapshot_path = target_dir / f"{snapshot_stem}-{short_hash(identity)}.md"
+            cached["path"] = vault_web_path(snapshot_path)
+        snapshot_node = {**node, "cache": cache}
         try:
-            snapshot_text = build_snapshot_markdown(index["vault_id"], node)
+            snapshot_text = build_snapshot_markdown(index["vault_id"], snapshot_node)
         except (FileNotFoundError, KeyError):
             snapshot_text = (
                 f"# {node.get('title', source_id)}\n\n"
+                f"{cache_metadata_markdown(snapshot_node)}\n\n"
                 f"- Source id: `{source_id}`\n"
                 f"- Source path: `data/processed/{source_path}`\n"
                 f"- Preview: {node.get('preview', '')}\n"
             )
         write_vault_markdown(snapshot_path, snapshot_text)
-        snapshots.append(
-            {
-                "id": f"snapshot:{turn_id}:{source_id}",
-                "title": node.get("title", source_id),
-                "type": node.get("type", "finance.note"),
-                "path": vault_web_path(snapshot_path),
-                "source_id": source_id,
-                "source_path": f"data/processed/{source_path}",
-            }
-        )
+        snapshots.append(cached)
 
     cache_dir = vault_dir / "cache"
     program_path = cache_dir / f"{turn_id}-program.md"
@@ -1282,6 +1894,9 @@ def persist_chat_turn(
     program = execution.get("program") or {"operation": "llm_fallback"}
     bindings = execution.get("bindings") or []
     metrics = execution.get("metrics") or {}
+    metrics["evidence_cache_hits"] = evidence_cache_hits
+    metrics["evidence_cache_misses"] = evidence_cache_misses
+    metrics["evidence_cache_refreshes"] = evidence_cache_refreshes
 
     write_vault_markdown(
         program_path,
@@ -1354,6 +1969,7 @@ def persist_chat_turn(
         "cache_hit": bool(execution.get("cache_hit")),
         "program": program,
         "metrics": metrics,
+        "evidence_ids": [snapshot["id"] for snapshot in snapshots],
         "paths": {
             "turn": vault_web_path(turn_path),
             "program": vault_web_path(program_path),
@@ -1362,13 +1978,6 @@ def persist_chat_turn(
         },
     }
     runs = list(index.get("runs") or []) + [run]
-    all_nodes = list(index.get("nodes") or [])
-    known_paths = {node.get("path") for node in all_nodes}
-    for snapshot in snapshots:
-        if snapshot["path"] not in known_paths:
-            all_nodes.append(snapshot)
-            known_paths.add(snapshot["path"])
-
     transcript = [f"# {index['title']}", ""]
     for message in messages:
         transcript.extend([f"## {message['role'].title()} · Turn {message['turn']}", "", message["content"], ""])
@@ -1399,9 +2008,12 @@ def persist_chat_turn(
         {"source": index["vault_id"], "target": f"{index['vault_id']}:{item['turn']}", "rel": "contains"}
         for item in runs
     ]
+    valid_evidence_ids = {node["id"] for node in all_nodes}
     graph_links.extend(
-        {"source": f"{index['vault_id']}:{turn_number}", "target": snapshot["id"], "rel": "binds"}
-        for snapshot in snapshots
+        {"source": f"{index['vault_id']}:{item['turn']}", "target": evidence_id, "rel": "binds"}
+        for item in runs
+        for evidence_id in item.get("evidence_ids") or []
+        if evidence_id in valid_evidence_ids
     )
     (vault_dir / "graph.json").write_text(json.dumps({"nodes": graph_nodes, "links": graph_links}, indent=2), encoding="utf-8")
 
@@ -1537,6 +2149,17 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(400, {"ok": False, "error": "method must be auto or naive"})
             return
 
+        client_provider = str(self.headers.get("X-FinOKF-Provider") or "").strip().lower()
+        client_api_key = str(self.headers.get("X-FinOKF-API-Key") or "").strip()
+        if client_provider and client_provider not in {"openai", "anthropic", "ollama"}:
+            self._json(400, {"ok": False, "error": "provider must be openai, anthropic, or ollama"})
+            return
+        if client_provider in {"openai", "anthropic"} and not client_api_key:
+            self._json(400, {"ok": False, "error": f"an API key is required for {client_provider}"})
+            return
+        selected_provider = client_provider or LLM_PROVIDER
+        selected_model = provider_model(selected_provider)
+
         try:
             _browser_index, node_by_id = load_browser_index()
         except Exception as exc:
@@ -1564,9 +2187,43 @@ class Handler(SimpleHTTPRequestHandler):
         route_ms = (time.perf_counter_ns() - route_started) / 1_000_000
 
         bind_started = time.perf_counter_ns()
-        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "auto" else {"hit": False}
+        mcp_ms = 0.0
+        market_handoff: dict | None = None
+        market_decision = market_data_agent_decision(message)
+        if method == "auto" and market_decision["requires_yahoo"]:
+            try:
+                market_handoff, mcp_ms = run_market_data_agent(message, str(selected.get("ticker") or ""))
+            except Exception as exc:
+                self._json(502, {"ok": False, "error": f"Yahoo Finance MCP request failed: {exc}"})
+                return
+            compiled = {
+                # Yahoo is an evidence-gathering subagent. The selected main
+                # provider still synthesizes the final answer from its handoff.
+                "hit": False,
+                "cache_hit": False,
+                "program": {
+                    "operation": "agent_handoff",
+                    "from": "market-data-router",
+                    "to": "main-answer",
+                    "decision": market_handoff["decision"],
+                    "tool_call": {
+                        "server": "finokf-yahoo-finance",
+                        "tool": "answer_yahoo_finance_question",
+                        "arguments": {"question": message, "ticker": market_handoff["ticker_hint"] or None},
+                    },
+                    "market_cache_key": market_handoff["cache_key"],
+                    "market_cache_hit": market_handoff["cache_hit"],
+                    "window": (market_handoff["result"] or {}).get("window"),
+                    "interval": (market_handoff["result"] or {}).get("interval"),
+                },
+                "bindings": [],
+                "evidence_nodes": market_handoff["evidence_nodes"],
+                "reason": market_handoff["decision"]["reason"],
+            }
+        else:
+            compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "auto" else {"hit": False}
         evidence_nodes = compiled.get("evidence_nodes") or gather_evidence(selected, message, node_by_id)
-        if method == "auto" and not compiled.get("hit"):
+        if method == "auto" and not compiled.get("hit") and not market_handoff:
             evidence_nodes = add_retrieval_filings(selected, message, evidence_nodes, node_by_id)
         bind_ms = (time.perf_counter_ns() - bind_started) / 1_000_000
         evidence_context = build_prompt_context(selected, evidence_nodes, message if method == "auto" and not compiled.get("hit") else "")
@@ -1577,7 +2234,9 @@ class Handler(SimpleHTTPRequestHandler):
             "evidence is partial, and point to source notes when the user asks for provenance. "
             "For investment questions, do not provide personalized financial advice; instead give "
             "an evidence-based bull/base/bear view from the filings and clearly name missing items "
-            "such as current price, valuation multiples, or user risk tolerance."
+            "such as current price, valuation multiples, or user risk tolerance. When the evidence "
+            "contains a Yahoo Finance MCP result, treat it as authorized market evidence, use it in "
+            "the answer, distinguish share price from market capitalization, and cite Yahoo Finance."
         )
         user_prompt = (
             f"Selected note title: {selected.get('title', 'Unknown')}\n"
@@ -1596,9 +2255,9 @@ class Handler(SimpleHTTPRequestHandler):
         cache_key = ""
         if compiled.get("hit"):
             answer = str(compiled["answer"])
-            route = "compiled-program"
+            route = str(compiled.get("route") or "compiled-program")
         else:
-            if not LLM_ENABLED:
+            if not LLM_ENABLED and not client_provider:
                 self._json(
                     422,
                     {
@@ -1609,6 +2268,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             if method == "auto":
                 investment_instruction = ""
+                prompt_ticker = str(selected.get("ticker") or "Unknown")
                 if is_investment_question(message):
                     investment_instruction = (
                         "\nThis is an investment-style question. Use the retrieved filing summaries "
@@ -1616,14 +2276,25 @@ class Handler(SimpleHTTPRequestHandler):
                         "be concluded without market price/valuation data. Do not merely offer to "
                         "extract filings; the extraction has already been done.\n"
                     )
+                market_instruction = ""
+                if market_handoff:
+                    prompt_ticker = ", ".join(yahoo_result_tickers(market_handoff["result"] or {}, market_handoff["ticker_hint"])) or "Unknown"
+                    market_instruction = (
+                        "\nA dedicated market-data agent determined that this question requires Yahoo Finance, "
+                        "fetched the structured MCP evidence below, and handed it to you. Answer from that evidence now. "
+                        "For a requested non-trading date, report the latest trading session on or before that date. "
+                        "If 'worth' is ambiguous, state the historical share price first and explain whether the evidence "
+                        "is sufficient for an exact market capitalization. Do not fall back to unrelated selected-company filings.\n"
+                    )
                 user_prompt = (
-                    f"Ticker: {selected.get('ticker', 'Unknown')}\n"
+                    f"Ticker: {prompt_ticker}\n"
                     f"Retrieved evidence follows. Use only this evidence; if it is insufficient, say so. "
-                    f"Cite the filing path(s) you used in a short Sources section.\n\n"
+                    f"Cite the source(s) you used in a short Sources section.\n\n"
                     f"{investment_instruction}"
+                    f"{market_instruction}"
                     f"{evidence_context}\n\nQuestion: {message}"
                 )
-            cache_key = response_cache_key(method, system_prompt, user_prompt)
+            cache_key = response_cache_key(method, system_prompt, user_prompt, selected_provider, selected_model)
             cached_response = response_cache_get(cache_key)
             if cached_response:
                 answer = str(cached_response.get("answer") or "")
@@ -1632,13 +2303,26 @@ class Handler(SimpleHTTPRequestHandler):
                 llm_cache_hit = True
             else:
                 try:
-                    answer, usage, model_ms = call_llm(system_prompt, user_prompt)
+                    answer, usage, model_ms = call_llm(
+                        system_prompt,
+                        user_prompt,
+                        provider=selected_provider,
+                        api_key=client_api_key or None,
+                        model=selected_model,
+                    )
                 except Exception as exc:
-                    provider = "OpenAI" if LLM_PROVIDER == "openai" else "Ollama"
-                    self._json(502, {"ok": False, "error": f"{provider} model request failed: {exc}"})
+                    provider_label = {"openai": "OpenAI", "anthropic": "Anthropic", "ollama": "Local Llama"}[selected_provider]
+                    self._json(502, {"ok": False, "error": f"{provider_label} model request failed: {exc}"})
                     return
                 response_cache_put(cache_key, {"answer": answer, "usage": usage})
-            route = f"{LLM_PROVIDER}-grounded-fallback" if method == "auto" else f"{LLM_PROVIDER}-naive"
+            route = (
+                f"market-data-agent-to-{selected_provider}"
+                if market_handoff
+                else (f"{selected_provider}-grounded-fallback" if method == "auto" else f"{selected_provider}-naive")
+            )
+
+        if market_handoff and market_handoff.get("result"):
+            answer = ensure_yahoo_source(answer, market_handoff["result"], str(market_handoff.get("ticker_hint") or ""))
 
         before_persist_ms = (time.perf_counter_ns() - total_started) / 1_000_000
         metrics = {
@@ -1646,13 +2330,16 @@ class Handler(SimpleHTTPRequestHandler):
             "route_ms": round(route_ms, 3),
             "bind_ms": round(bind_ms, 3),
             "model_ms": round(model_ms, 3),
+            "mcp_ms": round(mcp_ms, 3),
+            "market_data_cache_hit": bool(market_handoff and market_handoff.get("cache_hit")),
             "llm_cache_hit": llm_cache_hit,
             **usage,
         }
+        compiled_cache_hit = bool(compiled.get("cache_hit", compiled.get("hit")))
         execution = {
             "method": method,
             "route": route,
-            "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
+            "cache_hit": compiled_cache_hit or llm_cache_hit,
             "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "grounded fallback" if method == "auto" else "naive baseline")},
             "bindings": compiled.get("bindings") or [],
             "metrics": metrics,
@@ -1696,11 +2383,12 @@ class Handler(SimpleHTTPRequestHandler):
             200,
             {
                 "ok": True,
-                "model": LLM_MODEL,
+                "model": selected_model,
+                "provider": selected_provider,
                 "answer": answer,
                 "method": method,
                 "route": route,
-                "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
+                "cache_hit": compiled_cache_hit or llm_cache_hit,
                 "metrics": metrics,
                 "vault": vault,
             },
@@ -1726,7 +2414,7 @@ def main() -> int:
     parser.add_argument("--vaults-dir", default=str(DATA_ROOT / "vaults" / "answers"), help="Answer vault directory.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8770)
-    parser.add_argument("--llm-provider", choices=["ollama", "openai"], default=os.environ.get("FINOKF_LLM_PROVIDER", "ollama"), help="Fallback LLM provider.")
+    parser.add_argument("--llm-provider", choices=["ollama", "openai", "anthropic"], default=os.environ.get("FINOKF_LLM_PROVIDER", "ollama"), help="Fallback LLM provider when the browser has not selected one.")
     parser.add_argument("--llm-url", default=os.environ.get("FINOKF_LLM_URL", LLM_URL), help="Local Ollama URL.")
     parser.add_argument("--llm-model", default=os.environ.get("FINOKF_LLM_MODEL"), help="Provider model name (defaults by provider).")
     parser.add_argument("--no-llm", action="store_true", help="Run the UI and FlashOKF path without a model fallback.")
@@ -1750,7 +2438,11 @@ def main() -> int:
     VAULTS.mkdir(parents=True, exist_ok=True)
     LLM_PROVIDER = args.llm_provider
     LLM_URL = args.llm_url
-    LLM_MODEL = args.llm_model or ("gpt-5-mini" if LLM_PROVIDER == "openai" else "llama3.2:3b")
+    LLM_MODEL = args.llm_model or {
+        "openai": OPENAI_MODEL,
+        "anthropic": ANTHROPIC_MODEL,
+        "ollama": OLLAMA_MODEL,
+    }[LLM_PROVIDER]
     LLM_TIMEOUT = args.llm_timeout
     LLM_ENABLED = not args.no_llm
     RESPONSE_CACHE_SIZE = max(0, args.response_cache_size)

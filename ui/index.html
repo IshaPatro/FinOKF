@@ -28,6 +28,13 @@
               <path d="M8.5 12h7M8.5 15h7M8.5 18h4"></path>
             </svg>
           </button>
+          <button id="providerButton" class="view-button provider-button" type="button" aria-label="Choose AI provider" title="Choose AI provider">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="8.5" cy="14.5" r="4.5"></circle>
+              <path d="M11.8 11.2 20 3M16.5 6.5l2 2M14.2 8.8l2 2"></path>
+            </svg>
+            <span id="providerIndicator" class="provider-indicator" aria-hidden="true"></span>
+          </button>
         </nav>
 
         <div class="view-stack">
@@ -116,6 +123,54 @@
         </div>
       </aside>
     </main>
+
+    <dialog id="providerDialog" class="provider-dialog" aria-labelledby="providerDialogTitle">
+      <form id="providerForm" class="provider-card">
+        <div class="provider-card-head">
+          <div>
+            <div class="provider-kicker">AI connection</div>
+            <h2 id="providerDialogTitle">Choose a provider</h2>
+          </div>
+          <button id="providerCloseButton" class="dialog-icon-button" type="button" aria-label="Close provider settings">×</button>
+        </div>
+
+        <p class="provider-intro">Pick one provider for the research assistant. Once selected, the other choices stay disabled until you reset the connection.</p>
+
+        <div class="provider-options" role="group" aria-label="AI providers">
+          <button class="provider-option" type="button" data-provider="openai">
+            <span class="provider-option-mark">O</span>
+            <span><strong>OpenAI</strong><small>Use your OpenAI API key</small></span>
+          </button>
+          <button class="provider-option" type="button" data-provider="anthropic">
+            <span class="provider-option-mark">A</span>
+            <span><strong>Anthropic</strong><small>Use your Anthropic API key</small></span>
+          </button>
+          <button class="provider-option" type="button" data-provider="ollama">
+            <span class="provider-option-mark">L</span>
+            <span><strong>Local Llama</strong><small>Use the local Ollama server</small></span>
+          </button>
+        </div>
+
+        <div id="apiKeyFields" class="api-key-fields" hidden>
+          <label id="apiKeyLabel" for="apiKeyInput">API key</label>
+          <div class="api-key-input-row">
+            <input id="apiKeyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your API key" />
+            <button id="apiKeyVisibilityButton" class="key-visibility-button" type="button" aria-label="Show API key">Show</button>
+          </div>
+        </div>
+
+        <div class="key-privacy-note">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.7 2.8 8 7 10 4.2-2 7-5.3 7-10V6z"></path><path d="m9 12 2 2 4-5"></path></svg>
+          <span><strong>Your key is not stored.</strong> It stays only in this browser tab's memory, is sent to the local FinOKF server for each request, and is cleared when you refresh or close the tab.</span>
+        </div>
+
+        <div id="providerStatus" class="provider-status" aria-live="polite">No provider selected.</div>
+        <div class="provider-actions">
+          <button id="providerResetButton" class="dialog-button secondary" type="button" hidden>Reset choice</button>
+          <button id="providerConnectButton" class="dialog-button primary" type="submit" disabled>Connect</button>
+        </div>
+      </form>
+    </dialog>
     <script src="./vendor/ag-grid/ag-grid-community.min.js"></script>
     <script src="./app.js"></script>
   </body>

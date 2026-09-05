@@ -30,6 +30,17 @@ const state = {
   answerGraphNodes: new Map(),
   vaultHistory: [],
   vaultHistoryOpen: false,
+  provider: null,
+  providerDraft: null,
+  providerConnected: false,
+  apiKey: "",
+  agentRunning: false,
+};
+
+const PROVIDER_LABELS = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  ollama: "Local Llama",
 };
 
 const NODE_COLORS = {
@@ -107,6 +118,19 @@ const els = {
   editToggle: document.getElementById("editToggle"),
   saveButton: document.getElementById("saveButton"),
   saveState: document.getElementById("saveState"),
+  providerButton: document.getElementById("providerButton"),
+  providerIndicator: document.getElementById("providerIndicator"),
+  providerDialog: document.getElementById("providerDialog"),
+  providerForm: document.getElementById("providerForm"),
+  providerCloseButton: document.getElementById("providerCloseButton"),
+  providerOptions: [...document.querySelectorAll(".provider-option")],
+  apiKeyFields: document.getElementById("apiKeyFields"),
+  apiKeyLabel: document.getElementById("apiKeyLabel"),
+  apiKeyInput: document.getElementById("apiKeyInput"),
+  apiKeyVisibilityButton: document.getElementById("apiKeyVisibilityButton"),
+  providerStatus: document.getElementById("providerStatus"),
+  providerResetButton: document.getElementById("providerResetButton"),
+  providerConnectButton: document.getElementById("providerConnectButton"),
 };
 
 function nodeKind(type) {
@@ -197,6 +221,85 @@ async function loadVaultHistory() {
   state.vaults = [payload.knowledge_graph, ...(payload.vaults || [])].filter(Boolean);
   state.vaultHistory = payload.vaults || [];
   renderVaultHistory();
+}
+
+/* ------------------------------------------------------------------ AI provider */
+function updateProviderButton() {
+  const label = state.providerConnected ? PROVIDER_LABELS[state.provider] : "Choose AI provider";
+  els.providerButton.classList.toggle("connected", state.providerConnected);
+  els.providerButton.classList.toggle("busy", state.agentRunning);
+  els.providerButton.disabled = state.agentRunning;
+  els.providerButton.title = state.agentRunning ? `${label} · agent is running` : label;
+  els.providerButton.setAttribute("aria-label", state.agentRunning ? `${label}; locked while agent is running` : label);
+}
+
+function renderProviderDialog() {
+  const selected = state.providerDraft || state.provider;
+  for (const option of els.providerOptions) {
+    const isSelected = option.dataset.provider === selected;
+    option.classList.toggle("selected", isSelected);
+    option.disabled = state.agentRunning || Boolean(selected && !isSelected);
+    option.setAttribute("aria-pressed", String(isSelected));
+  }
+
+  const needsKey = selected === "openai" || selected === "anthropic";
+  els.apiKeyFields.hidden = !needsKey || state.providerConnected;
+  els.apiKeyLabel.textContent = selected === "anthropic" ? "Anthropic API key" : "OpenAI API key";
+  els.apiKeyInput.placeholder = selected === "anthropic" ? "sk-ant-…" : "sk-…";
+  els.providerResetButton.hidden = !selected;
+  els.providerResetButton.disabled = state.agentRunning;
+
+  if (state.agentRunning) {
+    els.providerStatus.className = "provider-status";
+    els.providerStatus.textContent = "Provider settings are locked while the agent is running.";
+  } else if (state.providerConnected) {
+    els.providerStatus.className = "provider-status";
+    els.providerStatus.textContent = `${PROVIDER_LABELS[state.provider]} is connected for this tab.`;
+  } else if (selected && needsKey) {
+    els.providerStatus.className = "provider-status";
+    els.providerStatus.textContent = `Enter your ${PROVIDER_LABELS[selected]} key to connect.`;
+  } else if (selected === "ollama") {
+    els.providerStatus.className = "provider-status";
+    els.providerStatus.textContent = "FinOKF will use the local Ollama server configured by the script.";
+  } else {
+    els.providerStatus.className = "provider-status";
+    els.providerStatus.textContent = "No provider selected.";
+  }
+
+  const hasRequiredKey = !needsKey || Boolean(els.apiKeyInput.value.trim());
+  els.providerConnectButton.disabled = state.agentRunning || state.providerConnected || !selected || !hasRequiredKey;
+  els.providerConnectButton.textContent = state.providerConnected ? "Connected" : "Connect";
+}
+
+function openProviderDialog(message = "") {
+  if (state.agentRunning) return;
+  state.providerDraft = state.providerDraft || state.provider;
+  els.apiKeyInput.value = "";
+  els.apiKeyInput.type = "password";
+  els.apiKeyVisibilityButton.textContent = "Show";
+  renderProviderDialog();
+  if (message) {
+    els.providerStatus.className = "provider-status";
+    els.providerStatus.textContent = message;
+  }
+  if (!els.providerDialog.open) els.providerDialog.showModal();
+}
+
+function resetProviderChoice() {
+  if (state.agentRunning) return;
+  state.provider = null;
+  state.providerDraft = null;
+  state.providerConnected = false;
+  state.apiKey = "";
+  els.apiKeyInput.value = "";
+  updateProviderButton();
+  renderProviderDialog();
+}
+
+function setAgentRunning(running) {
+  state.agentRunning = running;
+  updateProviderButton();
+  if (running && els.providerDialog.open) els.providerDialog.close();
 }
 
 /* ------------------------------------------------------------------ view switch */
@@ -882,6 +985,40 @@ function renderVaultInspector(vault) {
   `).join("");
 }
 
+function dedupeAnswerGraph(payload, vault) {
+  const metadataById = new Map((vault?.nodes || []).map((node) => [node.id, node]));
+  const canonicalIdByIdentity = new Map();
+  const aliases = new Map();
+  const nodes = [];
+  for (const node of payload.nodes || []) {
+    const metadata = metadataById.get(node.id) || {};
+    const identity = metadata.cache?.identity || metadata.source_path || metadata.source_id || "";
+    if (!identity || node.type === "finokf.chat_vault" || node.type === "finokf.cache_run") {
+      nodes.push(node);
+      continue;
+    }
+    const canonicalId = canonicalIdByIdentity.get(identity);
+    if (canonicalId) {
+      aliases.set(node.id, canonicalId);
+      continue;
+    }
+    canonicalIdByIdentity.set(identity, node.id);
+    nodes.push(node);
+  }
+
+  const links = [];
+  const seenLinks = new Set();
+  for (const link of payload.links || []) {
+    const source = aliases.get(link.source) || link.source;
+    const target = aliases.get(link.target) || link.target;
+    const key = `${source}\u0000${target}\u0000${link.rel || "edge"}`;
+    if (seenLinks.has(key)) continue;
+    seenLinks.add(key);
+    links.push({ ...link, source, target });
+  }
+  return { ...payload, nodes, links };
+}
+
 async function applyAnswerGraph(vault) {
   if (!vault?.graph && !vault?.graph_path) return;
   let payload = vault.graph;
@@ -890,6 +1027,7 @@ async function applyAnswerGraph(vault) {
     if (!response.ok) throw new Error(`graph trace missing: HTTP ${response.status}`);
     payload = await response.json();
   }
+  payload = dedupeAnswerGraph(payload, vault);
   const nodes = (payload.nodes || []).map((node) => ({
     ...node,
     path: vault.graph_path ? resolveRelativePath(vault.graph_path, node.path || "") : (node.path || ""),
@@ -977,9 +1115,14 @@ async function askLocalModel(question) {
   const node = state.nodeById.get(contextId) || state.nodeById.get(state.selectedId);
   if (!node) throw new Error("open a note first so the model has context");
 
+  const headers = { "Content-Type": "application/json" };
+  if (state.providerConnected) {
+    headers["X-FinOKF-Provider"] = state.provider;
+    if (state.apiKey) headers["X-FinOKF-API-Key"] = state.apiKey;
+  }
   const response = await fetch("/api/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       message: question,
       method: els.methodSelect.value,
@@ -1004,11 +1147,16 @@ async function askLocalModel(question) {
 async function submitChat(value) {
   const question = value.trim();
   if (!question) return;
+  if (!state.providerConnected) {
+    openProviderDialog("Choose and connect a provider before running the agent.");
+    return;
+  }
+  setAgentRunning(true);
   addChatMessage("user", question);
   els.chatInput.value = "";
   els.chatInput.disabled = true;
   els.chatButton.disabled = true;
-  const pending = addChatMessage("assistant", els.methodSelect.value === "auto" ? "Checking FinOKF facts, then retrieving grounded evidence if needed…" : "Running the naïve model baseline…", "pending");
+  const pending = addChatMessage("assistant", els.methodSelect.value === "auto" ? "Routing across FinOKF facts, filings, and live market tools…" : "Running the naïve model baseline…", "pending");
   try {
     const result = await askLocalModel(question);
     updateChatMessage(pending, result.answer || "The local model returned an empty answer.");
@@ -1021,6 +1169,7 @@ async function submitChat(value) {
   } catch (error) {
     updateChatMessage(pending, `Local AI is not ready: ${error.message}`, "error");
   } finally {
+    setAgentRunning(false);
     els.chatInput.disabled = false;
     els.chatButton.disabled = false;
     els.chatInput.focus();
@@ -1630,6 +1779,51 @@ function buildLegend() {
 function bindEvents() {
   els.graphButton.addEventListener("click", () => setView("graph"));
   els.markdownButton.addEventListener("click", () => setView("markdown"));
+  els.providerButton.addEventListener("click", () => openProviderDialog());
+  els.providerCloseButton.addEventListener("click", () => els.providerDialog.close());
+  els.providerDialog.addEventListener("click", (event) => {
+    if (event.target === els.providerDialog) els.providerDialog.close();
+  });
+  els.providerDialog.addEventListener("close", () => {
+    els.apiKeyInput.value = "";
+    els.apiKeyInput.type = "password";
+    els.apiKeyVisibilityButton.textContent = "Show";
+  });
+  for (const option of els.providerOptions) {
+    option.addEventListener("click", () => {
+      if (state.agentRunning || state.providerDraft || state.provider) return;
+      state.providerDraft = option.dataset.provider;
+      renderProviderDialog();
+      if (state.providerDraft !== "ollama") requestAnimationFrame(() => els.apiKeyInput.focus());
+    });
+  }
+  els.apiKeyInput.addEventListener("input", renderProviderDialog);
+  els.apiKeyVisibilityButton.addEventListener("click", () => {
+    const showing = els.apiKeyInput.type === "text";
+    els.apiKeyInput.type = showing ? "password" : "text";
+    els.apiKeyVisibilityButton.textContent = showing ? "Show" : "Hide";
+    els.apiKeyVisibilityButton.setAttribute("aria-label", `${showing ? "Show" : "Hide"} API key`);
+  });
+  els.providerResetButton.addEventListener("click", resetProviderChoice);
+  els.providerForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (state.agentRunning || !state.providerDraft) return;
+    const needsKey = state.providerDraft === "openai" || state.providerDraft === "anthropic";
+    const key = els.apiKeyInput.value.trim();
+    if (needsKey && !key) {
+      els.providerStatus.className = "provider-status error";
+      els.providerStatus.textContent = "An API key is required for this provider.";
+      return;
+    }
+    state.provider = state.providerDraft;
+    state.apiKey = needsKey ? key : "";
+    state.providerConnected = true;
+    els.apiKeyInput.value = "";
+    updateProviderButton();
+    renderProviderDialog();
+    els.providerDialog.close();
+    els.chatInput.focus();
+  });
 
   els.chatForm.addEventListener("submit", (event) => { event.preventDefault(); submitChat(els.chatInput.value); });
   els.newChatButton.addEventListener("click", async () => {
@@ -1733,6 +1927,7 @@ async function init() {
     const companyFirst = state.index.companies?.[0]?.id;
     const first = state.nodeById.has(companyFirst) ? companyFirst : state.nodes[0]?.id;
     if (first) openNode(first, { showMarkdown: false, focusGraph: false });
+    openProviderDialog("Choose which provider the research assistant should use.");
   } catch (error) {
     els.docRendered.textContent = error.message;
     setView("markdown");
