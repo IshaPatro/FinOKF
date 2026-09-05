@@ -34,6 +34,17 @@ Converts SEC data into Markdown and builds per-company FinOKF fact bindings for 
 python3 scripts/convert_raw_sec_to_markdown_vault.py --input-dir data/raw/sp100_sec_core --output-dir data/processed
 ```
 
+### Local debug steps if only AAPL/ABBV are shown on the graph
+
+Run:
+
+```bash
+.\.venv\Scripts\python.exe scripts\build_vault_viewer_index.py `
+  --processed-dir data\processed `
+  --raw-dir data\raw\sp100_sec_core `
+  --output ui\vault-index.json
+```
+
 ## sec2md vault
 
 Fetches the current S&P 100 universe and converts 2020–2026 primary SEC filings directly into `data/processed` without a raw-data folder. Completed companies are recorded in `data/processed/_index/company-progress.json` and skipped on later runs.
@@ -73,11 +84,20 @@ Runs the backend and UI on port `8770`. Every local chat is saved as a switchabl
 python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770 --no-llm
 ```
 
-With local LLM:
+With local Ollama fallback:
 
 ```bash
 python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770 --llm-url http://127.0.0.1:11434 --llm-model llama3.2:3b
 ```
+
+With OpenAI as the grounded fallback, set the key in the server shell (never in the browser) and start the provider explicitly:
+
+```powershell
+$env:OPENAI_API_KEY="your_api_key_here"
+.\.venv\Scripts\python.exe scripts\serve_vault.py --processed-dir data\processed --vaults-dir data\vaults\answers --host 127.0.0.1 --port 8770 --llm-provider openai --llm-model gpt-5-mini
+```
+
+The UI defaults to **Automatic**: it first attempts deterministic FlashOKF lookup/arithmetic on simple queries, then retrieves a small set of relevant filing excerpts and calls the configured fallback model ONLY when there are no simple compiled program matches. **ollama-grounded-fallback** is then attempted, this is a lightweight local model capable of reasoning and retrieval to answer questions. **Naïve LLM** remains available as a baseline; it sends the selected note without the retrieval augmentation and returns a full online LLM response.
 
 Open:
 
@@ -94,4 +114,4 @@ Measured on 2026-07-16 with warm `llama3.2:3b` over three AAPL questions: 2025 r
 | Naïve | Full Markdown → local Llama | 3 | 8,383.51 ms | 7,451.68 ms | 4,158 | 237 | 0/3 |
 | FlashOKF | Compiled fact program | 3 | 6.18 ms | 5.62 ms | 0 | 0 | 3/3 |
 
-For this exact-query workload, FlashOKF was **1,356× faster** because verified cache programs answered without invoking the model. Unsupported questions still fall back to the local Llama path.
+For this exact-query workload, FlashOKF was **1,356× faster** because verified cache programs answered without invoking the model. Uncached questions still fall back to the local Llama path and if that is not suitable, an external LLM.

@@ -19,10 +19,13 @@ import json
 import os
 import re
 import time
+from collections import OrderedDict
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Lock
 from urllib import error as urlerror
 from urllib import request as urlrequest
 from urllib.parse import urlparse
@@ -36,7 +39,11 @@ LLM_URL = "http://127.0.0.1:11434"
 LLM_MODEL = "llama3.2:3b"
 LLM_TIMEOUT = 180
 LLM_ENABLED = True
+LLM_PROVIDER = "ollama"
 FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
+RESPONSE_CACHE_SIZE = 128
+RESPONSE_LRU: OrderedDict[str, dict] = OrderedDict()
+RESPONSE_CACHE_LOCK = Lock()
 
 
 def slugify(text: str) -> str:
@@ -59,7 +66,27 @@ def load_browser_index() -> tuple[dict, dict[str, dict]]:
 
 
 def read_processed_markdown(rel_path: str) -> str:
-    return (PROCESSED / rel_path).read_text(encoding="utf-8", errors="replace")
+    return resolve_processed_path(rel_path).read_text(encoding="utf-8", errors="replace")
+
+
+def resolve_processed_path(rel_path: str) -> Path:
+    path = PROCESSED / rel_path
+    if path.exists():
+        return path
+
+    requested = Path(rel_path)
+    parent = PROCESSED / requested.parent
+    if parent.exists():
+        accession = re.search(r"\d{10}-\d{2}-\d{6}", requested.name)
+        if accession:
+            matches = sorted(parent.glob(f"*{accession.group(0)}*"))
+            if matches:
+                return matches[0]
+        stem_prefix = requested.stem.rsplit("-", 1)[0]
+        matches = sorted(parent.glob(f"{stem_prefix}*"))
+        if matches:
+            return matches[0]
+    return path
 
 
 def trim_markdown_preview(text: str, max_chars: int = 1200) -> str:
@@ -225,13 +252,216 @@ def gather_evidence(selected: dict, question: str, node_by_id: dict[str, dict]) 
     return chosen[:8]
 
 
-def build_prompt_context(selected: dict, evidence_nodes: list[dict]) -> str:
+def question_terms(question: str) -> list[str]:
+    """Return a small, useful keyword set for lexical filing retrieval."""
+    ignored = {"about", "after", "against", "and", "are", "between", "did", "does", "for", "from", "have", "how", "into", "its", "the", "their", "this", "was", "what", "when", "with"}
+    terms = [term for term in re.findall(r"[a-z]{4,}", question.lower()) if term not in ignored]
+    if is_investment_question(question):
+        terms.extend(
+            [
+                "revenue",
+                "sales",
+                "income",
+                "margin",
+                "cash",
+                "debt",
+                "eps",
+                "risk",
+                "competition",
+                "liquidity",
+                "capital",
+                "repurchase",
+            ]
+        )
+    deduped: list[str] = []
+    for term in terms:
+        if term not in deduped:
+            deduped.append(term)
+    return deduped[:18]
+
+
+def is_investment_question(question: str) -> bool:
+    q = question.lower()
+    return any(token in q for token in ("good stock", "invest", "investment", "buy", "hold", "sell", "valuation", "bull", "bear"))
+
+
+def strip_inline_html(text: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def structured_filing_excerpt(raw: str, question: str, max_chars: int) -> str:
+    if not raw.startswith('schema_version: "finokf-filing/'):
+        return ""
+
+    properties: dict[str, str] = {}
+    for key in ("title", "form", "fiscal_year", "filing_date", "report_date"):
+        match = re.search(rf"^\s*{key}:\s*\"?([^\"\n]+)\"?\s*$", raw, flags=re.MULTILINE)
+        if match:
+            properties[key] = match.group(1).strip()
+
+    metric_patterns = [
+        r"net sales",
+        r"revenue",
+        r"net income",
+        r"operating income",
+        r"gross margin",
+        r"earnings per share",
+        r"cash.*equivalents",
+        r"marketable securities",
+        r"total assets",
+        r"total liabilities",
+        r"term debt",
+        r"commercial paper",
+        r"research and development",
+        r"share repurchases?",
+        r"dividends?",
+    ]
+    if not is_investment_question(question):
+        metric_patterns.extend(re.escape(term) for term in question_terms(question))
+    wanted_metric = re.compile("|".join(metric_patterns), flags=re.IGNORECASE)
+
+    fact_rows: list[tuple[int, str]] = []
+    current: dict[str, str] = {}
+    label_priority = [
+        (re.compile(r"revenue|net sales", re.IGNORECASE), 90),
+        (re.compile(r"net income", re.IGNORECASE), 85),
+        (re.compile(r"operating income|gross margin", re.IGNORECASE), 80),
+        (re.compile(r"cash|marketable securities|assets|liabilities|debt|commercial paper", re.IGNORECASE), 70),
+        (re.compile(r"earnings per share|dividends?|share repurchases?", re.IGNORECASE), 60),
+        (re.compile(r"research and development", re.IGNORECASE), 50),
+    ]
+
+    def add_fact_row(fact: dict[str, str]) -> None:
+        label = fact.get("label", "")
+        if not label or not wanted_metric.search(label):
+            return
+        label_lower = label.lower()
+        if any(token in label_lower for token in ("remaining performance obligation", "contract liability revenue", "deferred revenue percentage")):
+            return
+        period = fact.get("period.end") or fact.get("period.instant") or fact.get("period.fiscal_year", "")
+        rank = 10
+        for pattern, score in label_priority:
+            if pattern.search(label):
+                rank = score
+                break
+        if "dimensions" not in fact:
+            rank += 25
+        if fact.get("key_fact", "").lower() == "true":
+            rank += 15
+        fiscal_year = str(fact.get("period.fiscal_year") or "")
+        if fiscal_year.isdigit():
+            rank += min(int(fiscal_year) - 2000, 30)
+        fact_rows.append((rank, f"- {label}: {fact.get('display_value') or fact.get('value', 'n/a')} ({period})"))
+
+    for line in raw.splitlines():
+        if line.startswith("text_facts:"):
+            break
+        if line.startswith("  - fact_id:"):
+            if current:
+                add_fact_row(current)
+            current = {}
+            continue
+        match = re.match(r"\s{4}([A-Za-z0-9_.-]+):\s*(.*)$", line)
+        if match and current is not None:
+            key, value = match.groups()
+            current[key] = value.strip().strip('"')
+            continue
+        period_match = re.match(r"\s{6}(end|instant|fiscal_year):\s*(.*)$", line)
+        if period_match and current is not None:
+            key, value = period_match.groups()
+            current[f"period.{key}"] = value.strip().strip('"')
+    if current:
+        add_fact_row(current)
+
+    text_rows: list[str] = []
+    text_pattern = re.compile(r"(risk factors?|competition|liquidity|capital resources|business|products|services)", flags=re.IGNORECASE)
+    text_section = raw.split("text_facts:", 1)[1] if "text_facts:" in raw else ""
+    text_section = text_section.split("calculation_relationships:", 1)[0]
+    for match in re.finditer(r'\n\s{4}label:\s*"([^"]+)"[\s\S]{0,900}?\n\s{4}value:\s*"((?:[^"\\]|\\.)*)"', text_section):
+        label, value = match.groups()
+        if not text_pattern.search(label) and not text_pattern.search(value):
+            continue
+        cleaned = strip_inline_html(value.encode("utf-8").decode("unicode_escape", errors="ignore"))
+        if cleaned:
+            text_rows.append(f"- {label}: {cleaned[:520]}")
+        if len(text_rows) >= 4:
+            break
+
+    header = " ".join(part for part in (properties.get("title"), properties.get("form"), properties.get("filing_date")) if part)
+    sections = [f"Structured filing summary: {header}".strip()]
+    if fact_rows:
+        ranked_rows = [row for _rank, row in sorted(fact_rows, reverse=True)]
+        sections.append("Financial highlights:\n" + "\n".join(dict.fromkeys(ranked_rows[:18])))
+    if text_rows:
+        sections.append("Business/risk snippets:\n" + "\n".join(text_rows))
+    if len(sections) == 1:
+        return ""
+    return trim_markdown_preview("\n\n".join(sections), max_chars)
+
+
+def filing_excerpt(path: str, question: str, max_chars: int = 1800) -> str:
+    """Extract a compact, query-relevant excerpt without sending an entire filing."""
+    try:
+        raw = read_processed_markdown(path)
+    except (OSError, ValueError):
+        return ""
+    structured = structured_filing_excerpt(raw, question, max_chars)
+    if structured:
+        return structured
+    terms = question_terms(question)
+    if not terms:
+        return trim_markdown_preview(raw, max_chars)
+    chunks = [chunk.strip() for chunk in re.split(r"\n\s*\n", raw) if chunk.strip()]
+    ranked = sorted(
+        ((sum(term in chunk.lower() for term in terms), position, chunk) for position, chunk in enumerate(chunks)),
+        key=lambda item: (item[0], -item[1]),
+        reverse=True,
+    )
+    selected = [chunk for score, _position, chunk in ranked if score > 0][:3]
+    return trim_markdown_preview("\n\n".join(selected), max_chars) if selected else ""
+
+
+def add_retrieval_filings(selected: dict, question: str, evidence_nodes: list[dict], node_by_id: dict[str, dict]) -> list[dict]:
+    """Add relevant company filings to the fallback LLM evidence chain."""
+    ticker = str(selected.get("ticker") or "").upper()
+    if not ticker:
+        return evidence_nodes
+    year_match = re.search(r"\b(20\d{2})\b", question)
+    wanted_year = year_match.group(1) if year_match else ""
+    candidates = [node for node in node_by_id.values() if node.get("type") == "finance.filing" and str(node.get("ticker") or "").upper() == ticker]
+    candidates.sort(
+        key=lambda node: (
+            1 if wanted_year and str((node.get("finokf") or {}).get("fiscal_year") or "") == wanted_year else 0,
+            1 if str((node.get("finokf") or {}).get("form") or "").upper() == "10-K" else 0,
+            str((node.get("finokf") or {}).get("filing_date") or ""),
+        ),
+        reverse=True,
+    )
+    seen = {str(node.get("id") or "") for node in evidence_nodes}
+    for candidate in candidates:
+        if candidate["id"] not in seen:
+            evidence_nodes.append(candidate)
+            seen.add(candidate["id"])
+        if len(evidence_nodes) >= 6:
+            break
+    return evidence_nodes
+
+
+def build_prompt_context(selected: dict, evidence_nodes: list[dict], question: str = "") -> str:
     lines = []
+    excerpted_paths: set[str] = set()
     for node in evidence_nodes:
         path = node.get("path", "")
         preview = (node.get("preview") or "").strip().replace("\n", " ")
         preview = preview[:260]
         lines.append(f"- {node.get('title', node.get('id'))} [{node.get('type')}] :: {path} :: {preview}")
+        if question and path and path not in excerpted_paths and len(excerpted_paths) < 3:
+            excerpt = filing_excerpt(str(path), question)
+            if excerpt:
+                lines.append(f"  Relevant excerpt from {path}:\n{excerpt}")
+                excerpted_paths.add(str(path))
     return "\n".join(lines)
 
 
@@ -470,6 +700,89 @@ def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     return answer, usage, model_ms
 
 
+def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
+    """Call the Responses API using the server-side OPENAI_API_KEY only."""
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set. Set it in your shell before starting the server.")
+    request_payload = {
+        "model": LLM_MODEL,
+        "instructions": system_prompt,
+        "input": user_prompt,
+        "store": False,
+    }
+    started = time.perf_counter_ns()
+    req = urlrequest.Request(
+        "https://api.openai.com/v1/responses",
+        data=json.dumps(request_payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
+            result = json.loads(response.read() or b"{}")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"OpenAI API request failed ({exc.code}): {detail}") from exc
+    model_ms = (time.perf_counter_ns() - started) / 1_000_000
+    parts: list[str] = []
+    for item in result.get("output") or []:
+        for content in item.get("content") or []:
+            if content.get("type") in {"output_text", "text"} and content.get("text"):
+                parts.append(str(content["text"]))
+    answer = (result.get("output_text") or "\n".join(parts)).strip()
+    if not answer:
+        raise RuntimeError("OpenAI returned no text output.")
+    api_usage = result.get("usage") or {}
+    usage = {
+        "prompt_tokens": int(api_usage.get("input_tokens") or 0),
+        "completion_tokens": int(api_usage.get("output_tokens") or 0),
+        "total_tokens": int(api_usage.get("total_tokens") or 0),
+        "ollama_total_ms": 0,
+        "ollama_load_ms": 0,
+    }
+    return answer, usage, model_ms
+
+
+def call_llm(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
+    if LLM_PROVIDER == "openai":
+        return call_openai(system_prompt, user_prompt)
+    return call_ollama(system_prompt, user_prompt)
+
+
+def response_cache_key(method: str, system_prompt: str, user_prompt: str) -> str:
+    payload = {
+        "provider": LLM_PROVIDER,
+        "model": LLM_MODEL,
+        "method": method,
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def response_cache_get(key: str) -> dict | None:
+    if RESPONSE_CACHE_SIZE <= 0:
+        return None
+    with RESPONSE_CACHE_LOCK:
+        cached = RESPONSE_LRU.get(key)
+        if cached is None:
+            return None
+        RESPONSE_LRU.move_to_end(key)
+        return deepcopy(cached)
+
+
+def response_cache_put(key: str, value: dict) -> None:
+    if RESPONSE_CACHE_SIZE <= 0:
+        return
+    with RESPONSE_CACHE_LOCK:
+        RESPONSE_LRU[key] = deepcopy(value)
+        RESPONSE_LRU.move_to_end(key)
+        while len(RESPONSE_LRU) > RESPONSE_CACHE_SIZE:
+            RESPONSE_LRU.popitem(last=False)
+
+
 def build_answer_trace(question: str, answer: str, selected: dict, evidence_nodes: list[dict], skill: dict[str, object]) -> dict[str, object]:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     slug = slugify(f"{selected.get('ticker', 'chat')}-{skill['name']}-{timestamp}-{short_hash(question + answer)}")
@@ -570,10 +883,32 @@ def list_answer_vaults() -> list[dict]:
 
 def build_snapshot_markdown(vault_id: str, node: dict) -> str:
     orig_rel = f"data/processed/{node['path']}"
-    preview = trim_markdown_preview(read_processed_markdown(node["path"]), 1800)
     snapshot_id = f"snapshot:{vault_id}:{node['id']}"
     title = node.get("title") or title_from_path(node["path"])
     escaped_title = title.replace('"', '\\"')
+    finokf = node.get("finokf") or {}
+    period = finokf.get("period") or {}
+
+    # Compiled FlashOKF evidence is a fact selected from the binding index, not
+    # a standalone Markdown file. Render its exact values in the snapshot so
+    # the answer-path graph is genuinely inspectable.
+    if node.get("type") == "finance.fact" and finokf.get("value") is not None:
+        fact_details = "\n".join(
+            [
+                "## Bound fact",
+                "",
+                f"- Concept: `{finokf.get('concept', 'Not available')}`",
+                f"- Stored value: `{finokf.get('value')} × {finokf.get('scale', '1')}`",
+                f"- Unit: `{finokf.get('unit', 'Not available')}`",
+                f"- Currency: `{finokf.get('currency', 'Not available')}`",
+                f"- Period: `{period.get('start') or 'instant'} → {period.get('end', 'Not available')}`",
+                f"- Fiscal period: `{period.get('fiscal_year', 'Not available')} {period.get('fiscal_period', '')}`",
+                "",
+            ]
+        )
+        preview = fact_details
+    else:
+        preview = trim_markdown_preview(read_processed_markdown(node["path"]), 1800)
     return f"""
 ---
 schema_version: "finokf-vault/1.0"
@@ -605,7 +940,7 @@ This note was included in the answer-local cache vault for `{vault_id}`.
 - Original node id: `{node['id']}`
 - Original vault path: `{orig_rel}`
 
-## Stored Preview
+## Evidence
 
 {preview}
 """
@@ -914,7 +1249,10 @@ def persist_chat_turn(
         seen_source_ids.add(source_id)
         folder = str(node.get("folder") or Path(source_path).parent.name or "notes")
         target_dir = vault_dir / (folder if folder in {"facts", "sources", "filings", "entities"} else "notes")
-        snapshot_path = target_dir / f"{turn_id}-{Path(source_path).name}"
+        # Snapshot files are Markdown wrappers even when the authoritative
+        # source is YAML. Keeping a .md extension prevents the viewer from
+        # parsing a wrapper as a complete structured filing.
+        snapshot_path = target_dir / f"{turn_id}-{Path(source_path).stem}.md"
         try:
             snapshot_text = build_snapshot_markdown(index["vault_id"], node)
         except (FileNotFoundError, KeyError):
@@ -951,7 +1289,7 @@ def persist_chat_turn(
             [
                 f"# {turn_id} Cache Program",
                 "",
-                f"- Method: `{execution.get('method', 'proposed')}`",
+                f"- Method: `{execution.get('method', 'auto')}`",
                 f"- Route: `{execution.get('route', 'llm-fallback')}`",
                 f"- Cache hit: `{str(bool(execution.get('cache_hit'))).lower()}`",
                 "",
@@ -1194,9 +1532,9 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(400, {"ok": False, "error": f"bad request: {exc}"})
             return
 
-        method = str(payload.get("method") or "proposed").lower()
-        if method not in {"naive", "proposed"}:
-            self._json(400, {"ok": False, "error": "method must be naive or proposed"})
+        method = str(payload.get("method") or "auto").lower()
+        if method not in {"auto", "naive"}:
+            self._json(400, {"ok": False, "error": "method must be auto or naive"})
             return
 
         try:
@@ -1226,15 +1564,20 @@ class Handler(SimpleHTTPRequestHandler):
         route_ms = (time.perf_counter_ns() - route_started) / 1_000_000
 
         bind_started = time.perf_counter_ns()
-        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "proposed" else {"hit": False}
+        compiled = compile_flashokf(message, str(selected.get("ticker") or "")) if method == "auto" else {"hit": False}
         evidence_nodes = compiled.get("evidence_nodes") or gather_evidence(selected, message, node_by_id)
+        if method == "auto" and not compiled.get("hit"):
+            evidence_nodes = add_retrieval_filings(selected, message, evidence_nodes, node_by_id)
         bind_ms = (time.perf_counter_ns() - bind_started) / 1_000_000
-        evidence_context = build_prompt_context(selected, evidence_nodes)
+        evidence_context = build_prompt_context(selected, evidence_nodes, message if method == "auto" and not compiled.get("hit") else "")
 
         system_prompt = (
             "You are FinOKF's local equity research assistant. Answer only from the selected "
             "Markdown note and the provided evidence chain. Be concise, mention uncertainty if the "
-            "evidence is partial, and point to source notes when the user asks for provenance."
+            "evidence is partial, and point to source notes when the user asks for provenance. "
+            "For investment questions, do not provide personalized financial advice; instead give "
+            "an evidence-based bull/base/bear view from the filings and clearly name missing items "
+            "such as current price, valuation multiples, or user risk tolerance."
         )
         user_prompt = (
             f"Selected note title: {selected.get('title', 'Unknown')}\n"
@@ -1249,6 +1592,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "ollama_total_ms": 0, "ollama_load_ms": 0}
         model_ms = 0.0
+        llm_cache_hit = False
+        cache_key = ""
         if compiled.get("hit"):
             answer = str(compiled["answer"])
             route = "compiled-program"
@@ -1262,20 +1607,38 @@ class Handler(SimpleHTTPRequestHandler):
                     },
                 )
                 return
-            if method == "proposed":
+            if method == "auto":
+                investment_instruction = ""
+                if is_investment_question(message):
+                    investment_instruction = (
+                        "\nThis is an investment-style question. Use the retrieved filing summaries "
+                        "to synthesize a tentative view now. Discuss positives, risks, and what cannot "
+                        "be concluded without market price/valuation data. Do not merely offer to "
+                        "extract filings; the extraction has already been done.\n"
+                    )
                 user_prompt = (
                     f"Ticker: {selected.get('ticker', 'Unknown')}\n"
-                    f"Compact bound evidence:\n{evidence_context}\n\nQuestion: {message}"
+                    f"Retrieved evidence follows. Use only this evidence; if it is insufficient, say so. "
+                    f"Cite the filing path(s) you used in a short Sources section.\n\n"
+                    f"{investment_instruction}"
+                    f"{evidence_context}\n\nQuestion: {message}"
                 )
-            try:
-                answer, usage, model_ms = call_ollama(system_prompt, user_prompt)
-            except urlerror.URLError as exc:
-                self._json(502, {"ok": False, "error": f"Ollama is not reachable at {LLM_URL}: {exc.reason}"})
-                return
-            except Exception as exc:
-                self._json(502, {"ok": False, "error": f"local model request failed: {exc}"})
-                return
-            route = "llm-fallback" if method == "proposed" else "naive-llm"
+            cache_key = response_cache_key(method, system_prompt, user_prompt)
+            cached_response = response_cache_get(cache_key)
+            if cached_response:
+                answer = str(cached_response.get("answer") or "")
+                usage = cached_response.get("usage") or usage
+                model_ms = 0.0
+                llm_cache_hit = True
+            else:
+                try:
+                    answer, usage, model_ms = call_llm(system_prompt, user_prompt)
+                except Exception as exc:
+                    provider = "OpenAI" if LLM_PROVIDER == "openai" else "Ollama"
+                    self._json(502, {"ok": False, "error": f"{provider} model request failed: {exc}"})
+                    return
+                response_cache_put(cache_key, {"answer": answer, "usage": usage})
+            route = f"{LLM_PROVIDER}-grounded-fallback" if method == "auto" else f"{LLM_PROVIDER}-naive"
 
         before_persist_ms = (time.perf_counter_ns() - total_started) / 1_000_000
         metrics = {
@@ -1283,16 +1646,20 @@ class Handler(SimpleHTTPRequestHandler):
             "route_ms": round(route_ms, 3),
             "bind_ms": round(bind_ms, 3),
             "model_ms": round(model_ms, 3),
+            "llm_cache_hit": llm_cache_hit,
             **usage,
         }
         execution = {
             "method": method,
             "route": route,
-            "cache_hit": bool(compiled.get("hit")),
-            "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "naive baseline")},
+            "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
+            "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "grounded fallback" if method == "auto" else "naive baseline")},
             "bindings": compiled.get("bindings") or [],
             "metrics": metrics,
         }
+        if llm_cache_hit and isinstance(execution["program"], dict):
+            execution["program"]["response_cache_key"] = cache_key
+            execution["program"]["operation"] = "lru_cached_llm_fallback"
         try:
             vault = persist_chat_turn(
                 str(payload.get("vault_id") or "") or None,
@@ -1333,7 +1700,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "answer": answer,
                 "method": method,
                 "route": route,
-                "cache_hit": bool(compiled.get("hit")),
+                "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
                 "metrics": metrics,
                 "vault": vault,
             },
@@ -1352,21 +1719,28 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_TIMEOUT, LLM_URL, PROCESSED, VAULTS
+    global INDEX_PATH, LLM_ENABLED, LLM_MODEL, LLM_PROVIDER, LLM_TIMEOUT, LLM_URL, PROCESSED, RESPONSE_CACHE_SIZE, VAULTS
     parser = argparse.ArgumentParser(description="Serve the FinOKF vault viewer with markdown saving.")
     parser.add_argument("--processed-dir", default=str(DATA_ROOT / "processed"), help="Processed vault directory.")
     parser.add_argument("--index", default="ui/vault-index.json", help="Browser index JSON path.")
     parser.add_argument("--vaults-dir", default=str(DATA_ROOT / "vaults" / "answers"), help="Answer vault directory.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8770)
+    parser.add_argument("--llm-provider", choices=["ollama", "openai"], default=os.environ.get("FINOKF_LLM_PROVIDER", "ollama"), help="Fallback LLM provider.")
     parser.add_argument("--llm-url", default=os.environ.get("FINOKF_LLM_URL", LLM_URL), help="Local Ollama URL.")
-    parser.add_argument("--llm-model", default=os.environ.get("FINOKF_LLM_MODEL", LLM_MODEL), help="Ollama model name.")
-    parser.add_argument("--no-llm", action="store_true", help="Run the UI and compiled cache path without an Ollama fallback.")
+    parser.add_argument("--llm-model", default=os.environ.get("FINOKF_LLM_MODEL"), help="Provider model name (defaults by provider).")
+    parser.add_argument("--no-llm", action="store_true", help="Run the UI and FlashOKF path without a model fallback.")
     parser.add_argument(
         "--llm-timeout",
         type=int,
         default=int(os.environ.get("FINOKF_LLM_TIMEOUT", LLM_TIMEOUT)),
         help="Local model timeout in seconds.",
+    )
+    parser.add_argument(
+        "--response-cache-size",
+        type=int,
+        default=int(os.environ.get("FINOKF_RESPONSE_CACHE_SIZE", RESPONSE_CACHE_SIZE)),
+        help="Maximum in-memory LRU entries for fallback LLM responses. Set 0 to disable.",
     )
     args = parser.parse_args()
 
@@ -1374,17 +1748,20 @@ def main() -> int:
     INDEX_PATH = (ROOT / args.index).resolve()
     VAULTS = (ROOT / args.vaults_dir).resolve()
     VAULTS.mkdir(parents=True, exist_ok=True)
+    LLM_PROVIDER = args.llm_provider
     LLM_URL = args.llm_url
-    LLM_MODEL = args.llm_model
+    LLM_MODEL = args.llm_model or ("gpt-5-mini" if LLM_PROVIDER == "openai" else "llama3.2:3b")
     LLM_TIMEOUT = args.llm_timeout
     LLM_ENABLED = not args.no_llm
+    RESPONSE_CACHE_SIZE = max(0, args.response_cache_size)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f"http://{args.host}:{args.port}/ui/index.html"
     print(
         f"FinOKF vault viewer running at:\n"
         f"    {url}\n"
         f"Editing writes to: {PROCESSED}\n"
-        f"Local AI: {f'{LLM_MODEL} at {LLM_URL}' if LLM_ENABLED else 'disabled (compiled cache only)'}\n"
+        f"LLM fallback: {f'{LLM_PROVIDER} · {LLM_MODEL}' if LLM_ENABLED else 'disabled (compiled cache only)'}\n"
+        f"Response LRU cache: {RESPONSE_CACHE_SIZE} entries\n"
         f"Answer vaults: {VAULTS}\n"
         f"Press Ctrl+C to stop."
     )
