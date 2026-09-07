@@ -280,28 +280,6 @@ button { border: 0; }
 .search-item .st-title { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .search-item .st-type { margin-left: auto; color: var(--quiet); font-size: 11px; flex: none; }
 
-.graph-controls {
-  position: absolute;
-  right: 14px; bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 5;
-}
-.graph-controls button {
-  width: 34px; height: 34px;
-  display: grid; place-items: center;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background: rgba(29,25,25,0.82);
-  backdrop-filter: blur(8px);
-  color: var(--muted);
-  font-size: 17px;
-  cursor: pointer;
-  transition: color .15s, border-color .15s, background .15s;
-}
-.graph-controls button:hover { color: var(--accent-2); border-color: var(--accent); background: var(--panel-2); }
-
 .graph-status {
   position: absolute;
   top: 16px; right: 16px;
@@ -327,6 +305,11 @@ button { border: 0; }
 }
 .legend-item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); }
 .legend-item .dot { width: 9px; height: 9px; border-radius: 50%; }
+.graph-view.answer-mode .graph-search,
+.graph-view.answer-mode .graph-status,
+.graph-view.answer-mode .graph-legend {
+  display: none;
+}
 
 /* ---- markdown reader / editor ---- */
 .markdown-view { display: none; grid-template-rows: auto minmax(0, 1fr); background: var(--panel); }
@@ -709,7 +692,7 @@ button { border: 0; }
   background: var(--panel);
 }
 .chat-head {
-  padding: 14px 18px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -722,19 +705,6 @@ button { border: 0; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--quiet);
-}
-.active-vault-label {
-  margin-top: 5px;
-  font-size: 13px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chat-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 .method-select {
   height: 32px;
@@ -834,10 +804,10 @@ button { border: 0; }
   font-size: 12px;
 }
 .vault-inspector {
-  max-height: 46vh;
+  max-height: 32vh;
   overflow: auto;
   border-bottom: 1px solid var(--line);
-  padding: 14px 14px 12px;
+  padding: 14px;
   background:
     linear-gradient(180deg, rgba(53,30,40,0.26) 0%, rgba(37,32,32,0.96) 72%),
     linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%);
@@ -861,6 +831,7 @@ button { border: 0; }
   color: var(--text);
 }
 .vault-skill {
+  display: none;
   flex: none;
   padding: 5px 9px;
   border: 1px solid rgba(174,184,160,0.3);
@@ -1011,6 +982,12 @@ button { border: 0; }
   cursor: pointer;
   text-align: left;
 }
+.vault-history-empty {
+  padding: 16px 14px;
+  color: var(--quiet);
+  font-size: 13px;
+  text-align: center;
+}
 .vault-switcher-button:hover, .vault-switcher-button.active { border-color: var(--accent); background: var(--panel-3); }
 .vault-switcher-chevrons { color: var(--muted); font-size: 11px; line-height: 8px; text-align: center; }
 .vault-switcher-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 650; }
@@ -1022,3 +999,49 @@ button { border: 0; }
   .chat-panel { border-left: 0; border-top: 1px solid var(--line); }
   .graph-legend { display: none; }
 }
+.agent-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.agent-heading small { display: block; font-size: 11px; opacity: .7; margin-top: 3px; }
+.agent-avatar { width: 36px; height: 36px; flex-shrink: 0; padding: 7px; border-radius: 50%; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.naive .agent-avatar { background: #ede3ff; color: #6b3fa0; }
+.finokf .agent-avatar { background: #d7f2e5; color: #17684a; }
+.agent-answer {
+  overflow: visible;
+}
+.agent-preview {
+  max-height: 4.45em;
+  overflow: clip;
+  color: var(--text);
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+}
+.agent-preview[hidden], .agent-body[hidden], .agent-extra[hidden] {
+  display: none;
+}
+.agent-body {
+  overflow-wrap: anywhere;
+}
+.show-more-button {
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-2);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+.show-more-button:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.agent-comparison { margin: 8px 0 20px; }
+.compare-button { padding: 6px 10px; border: 1px solid #b9c3cf; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font-size: 12px; }
+.agent-comparison > div { overflow-x: auto; margin-top: 10px; }
+.agent-comparison table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+.agent-comparison th, .agent-comparison td { padding: 7px; border-bottom: 1px solid #bdc5ce66; vertical-align: top; overflow-wrap: anywhere; }
+.agent-comparison caption { text-align: left; padding-bottom: 8px; }
+.agent-comparison p, .agent-warning { font-size: 11px; opacity: .75; }
+.agent-answer details { margin-top: 12px; font-size: 11px; overflow-wrap: anywhere; }
+.agent-answer summary { cursor: pointer; opacity: .8; }
+.agent-answer details > div { margin-top: 6px; }

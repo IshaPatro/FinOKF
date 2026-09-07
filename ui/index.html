@@ -12,7 +12,14 @@
     <main class="workspace">
       <section class="main-panel" aria-label="Graph and markdown viewer">
         <nav class="view-rail" aria-label="Viewer switcher">
-          <button id="graphViewButton" class="view-button active" type="button" data-view="graph" aria-label="Show graph" title="Graph view">
+          <button id="homeViewButton" class="view-button active" type="button" aria-label="Show knowledge graph home" title="Knowledge graph home">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.5 11.5 12 4l8.5 7.5"></path>
+              <path d="M6.5 10v9.5h11V10"></path>
+              <path d="M10 19.5v-5h4v5"></path>
+            </svg>
+          </button>
+          <button id="graphViewButton" class="view-button" type="button" data-view="graph" aria-label="Show graph" title="Graph view">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="6" cy="7" r="2.5"></circle>
               <circle cx="17" cy="5" r="2.5"></circle>
@@ -86,20 +93,13 @@
               <div id="searchResults" class="search-results" role="listbox"></div>
             </div>
 
-            <div class="graph-controls" role="group" aria-label="Graph controls">
-              <button data-zoom="in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
-              <button data-zoom="out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
-              <button data-zoom="reset" type="button" title="Fit graph" aria-label="Fit graph">⤢</button>
-              <button data-graph="home" type="button" title="Overview" aria-label="Overview">⌂</button>
-            </div>
-
             <div id="graphStatus" class="graph-status"></div>
             <div class="graph-legend" id="graphLegend" aria-hidden="true"></div>
           </section>
 
           <section id="markdownView" class="viewer markdown-view" aria-label="Markdown reader">
             <header class="doc-titlebar">
-              <div class="doc-title" id="docTitle" title="">Select a note</div>
+              <div class="doc-title" id="docTitle" title="">No vault selected</div>
               <div class="doc-actions">
                 <span id="saveState" class="save-state"></span>
                 <button id="editToggle" class="doc-btn" type="button" title="Toggle edit mode">Edit</button>
@@ -107,7 +107,7 @@
               </div>
             </header>
             <div class="doc-body">
-              <article id="docRendered" class="markdown-rendered">Loading…</article>
+              <article id="docRendered" class="markdown-rendered"></article>
               <textarea id="docEditor" class="markdown-editor" spellcheck="false" hidden></textarea>
             </div>
           </section>
@@ -117,19 +117,7 @@
       <aside class="chat-panel" aria-label="Research chat">
         <div class="chat-head">
           <div class="chat-head-copy">
-            <div class="chat-head-title">Research assistant</div>
-            <div class="active-vault-label">Local clearbox cache</div>
-          </div>
-          <div class="chat-head-actions">
-            <select id="methodSelect" class="method-select" aria-label="Answer method" title="Answer method">
-              <option value="auto">Automatic</option>
-              <option value="naive">Naïve LLM</option>
-            </select>
-            <button id="newChatButton" class="chat-head-btn" type="button" aria-label="Start new chat" title="New chat">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 5v14M5 12h14"></path>
-              </svg>
-            </button>
+            <div class="chat-head-title">Research comparison</div>
           </div>
         </div>
         <section id="vaultInspector" class="vault-inspector" hidden aria-label="Clearbox cache vault">
@@ -140,18 +128,16 @@
             </div>
             <div id="vaultSkill" class="vault-skill"></div>
           </div>
-          <div id="vaultChain" class="vault-chain"></div>
-          <div id="vaultMetrics" class="vault-metrics"></div>
         </section>
         <div id="chatMessages" class="chat-messages"></div>
         <form id="chatForm" class="chat-form">
-          <input id="chatInput" type="text" autocomplete="off" placeholder="Ask about the selected note" />
+          <input id="chatInput" type="text" autocomplete="off" placeholder="Ask a company or filing question" />
           <button type="submit">Ask</button>
         </form>
         <div class="vault-switcher-dock">
           <button id="historyButton" class="vault-switcher-button" type="button" aria-label="Switch vault" aria-expanded="false">
             <span class="vault-switcher-chevrons" aria-hidden="true">⌃<br />⌄</span>
-            <span id="activeVaultLabel" class="vault-switcher-name">Knowledge graph</span>
+            <span id="activeVaultLabel" class="vault-switcher-name">No vault selected</span>
             <span class="vault-switcher-gear" aria-hidden="true">⚙</span>
           </button>
           <section id="vaultHistoryPanel" class="vault-history-panel" hidden aria-label="Vault switcher">

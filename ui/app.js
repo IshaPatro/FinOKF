@@ -27,6 +27,7 @@ const state = {
   activeGridApis: [],
   currentVault: null,
   answerGraph: null,
+  graphLoadSerial: 0,
   answerGraphNodes: new Map(),
   vaultHistory: [],
   vaultHistoryOpen: false,
@@ -42,7 +43,9 @@ const NODE_COLORS = {
   source: "#d49285",
   bundle: "#d5dfc9",
   constraint: "#9c8b9a",
-  answer: "#d5dfc9",
+  // Answers are deliberately neutral so they remain readable and distinct
+  // from the evidence, cache, and skill nodes around them.
+  answer: "#ffffff",
   claim: "#aeb8a0",
   skill: "#d49285",
   manifest: "#9c8b9a",
@@ -82,6 +85,7 @@ const COMPANY_FILING_EDGE_TYPES = new Set(["filed_by", "has_filing"]);
 const els = {
   graphView: document.getElementById("graphView"),
   markdownView: document.getElementById("markdownView"),
+  homeButton: document.getElementById("homeViewButton"),
   graphButton: document.getElementById("graphViewButton"),
   markdownButton: document.getElementById("markdownViewButton"),
   providerButton: document.getElementById("providerButton"),
@@ -100,8 +104,6 @@ const els = {
   chatInput: document.getElementById("chatInput"),
   chatButton: document.querySelector("#chatForm button"),
   activeVaultLabel: document.getElementById("activeVaultLabel"),
-  methodSelect: document.getElementById("methodSelect"),
-  newChatButton: document.getElementById("newChatButton"),
   historyButton: document.getElementById("historyButton"),
   vaultHistoryPanel: document.getElementById("vaultHistoryPanel"),
   vaultHistoryList: document.getElementById("vaultHistoryList"),
@@ -208,7 +210,7 @@ async function loadVaultHistory() {
   const response = await fetch("/api/vaults", { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.ok) throw new Error(payload.error || `HTTP ${response.status}`);
-  state.vaults = [payload.knowledge_graph, ...(payload.vaults || [])].filter(Boolean);
+  state.vaults = payload.vaults || [];
   state.vaultHistory = payload.vaults || [];
   renderVaultHistory();
 }
@@ -218,8 +220,7 @@ function setView(view) {
   state.activeView = view;
   els.graphView.classList.toggle("active", view === "graph");
   els.markdownView.classList.toggle("active", view === "markdown");
-  els.graphButton.classList.toggle("active", view === "graph");
-  els.markdownButton.classList.toggle("active", view === "markdown");
+  updateRailButtons();
   if (view === "graph" && state.graph) requestAnimationFrame(() => state.graph.resize());
 }
 
@@ -294,7 +295,7 @@ function setAgentRunning(running) {
   renderProviderControls();
   els.chatInput.disabled = state.agentRunning;
   els.chatButton.disabled = state.agentRunning;
-  els.methodSelect.disabled = state.agentRunning;
+  els.historyButton.disabled = state.agentRunning;
 }
 
 /* ------------------------------------------------------------------ graph data selection */
@@ -342,20 +343,47 @@ function neighborhood(centerId, hops = 2, cap = 120) {
 
 function renderGraph() {
   if (!state.graph) return;
+  els.graphView.classList.toggle("answer-mode", Boolean(state.answerGraph));
   if (state.answerGraph) {
     state.graph.setData(state.answerGraph.nodes, state.answerGraph.links, state.selectedId, { directed: true });
-    els.status.textContent = `answer path · ${state.answerGraph.nodes.length} nodes · directional`;
+    els.status.textContent = "";
+    updateRailButtons();
     return;
   }
-  const focus = state.graphFocusId;
-  const data = focus ? neighborhood(focus) : overviewGraph();
-  state.graph.setData(data.nodes, data.links, state.selectedId);
-  if (focus) requestAnimationFrame(() => state.graph.fitLocal(true));
-  const filingCount = data.nodes.filter((node) => node.type === "finance.filing").length;
-  const companyCount = data.nodes.filter((node) => node.type === "finance.entity").length;
-  els.status.textContent = focus
-    ? `local graph · ${filingCount} filings · ${companyCount} companies`
-    : `overview · ${filingCount} filings · ${companyCount} companies`;
+  const graph = overviewGraph();
+  state.graph.setData(graph.nodes, graph.links, state.selectedId);
+  els.status.textContent = "";
+  updateRailButtons();
+}
+
+function updateRailButtons() {
+  els.homeButton?.classList?.toggle("active", state.activeView === "graph" && !state.currentVault);
+  els.graphButton?.classList?.toggle("active", state.activeView === "graph" && Boolean(state.currentVault));
+  els.markdownButton?.classList?.toggle("active", state.activeView === "markdown");
+}
+
+function showHomeGraph() {
+  if (state.agentRunning) return;
+  clearVaultInspector();
+  setActiveVault(null);
+  state.selectedId = null;
+  state.graphFocusId = null;
+  els.chatMessages.innerHTML = "";
+  els.docTitle.textContent = "No vault selected";
+  els.docTitle.title = "";
+  els.docRendered.textContent = "";
+  els.docEditor.value = "";
+  state.currentEditable = false;
+  state.currentPath = null;
+  state.currentFetchPath = null;
+  state.currentRaw = "";
+  setEditing(false);
+  setDirty(false);
+  els.editToggle.disabled = true;
+  renderGraph();
+  setView("graph");
+  state.graph?.reheat(0.65);
+  setTimeout(() => state.graph?.fit(true, true), 40);
 }
 
 function formatVaultTime(value) {
@@ -370,20 +398,21 @@ function formatVaultTime(value) {
 
 function setActiveVault(vault) {
   state.currentVault = vault;
-  els.activeVaultLabel.textContent = vault?.title || "Knowledge graph";
+  els.activeVaultLabel.textContent = vault?.title || "No vault selected";
+  updateRailButtons();
   renderVaultHistory();
 }
 
 function renderVaultHistory() {
   if (!els.vaultHistoryList) return;
-  const items = state.vaults.length
-    ? state.vaults.map((vault) => ({
-        ...vault,
-        subtitle: vault.kind === "knowledge-graph"
-          ? "Main vault"
-          : `${vault.ticker || "Research"} · ${(vault.runs || []).length} turn${(vault.runs || []).length === 1 ? "" : "s"}${vault.updated_at || vault.created_at ? ` · ${formatVaultTime(vault.updated_at || vault.created_at)}` : ""}`,
-      }))
-    : [{ kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph", subtitle: "Main vault" }];
+  const items = state.vaults.map((vault) => ({
+    ...vault,
+    subtitle: `${vault.ticker || "Research"} · ${(vault.runs || []).length} turn${(vault.runs || []).length === 1 ? "" : "s"}${vault.updated_at || vault.created_at ? ` · ${formatVaultTime(vault.updated_at || vault.created_at)}` : ""}`,
+  }));
+  if (!items.length) {
+    els.vaultHistoryList.innerHTML = '<div class="vault-history-empty">No saved vaults</div>';
+    return;
+  }
   els.vaultHistoryList.innerHTML = items.map((item) => {
     const active = state.currentVault?.vault_id === item.vault_id;
     return `
@@ -404,7 +433,7 @@ function toggleVaultHistory(force) {
 
 /* ------------------------------------------------------------------ markdown rendering */
 function escapeHtml(text) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function resolveWikiTarget(name) {
@@ -851,15 +880,15 @@ async function openDocument(path, title, options = {}) {
 }
 
 async function openNode(id, options = {}) {
+  if (state.agentRunning) return;
   const node = state.nodeById.get(id);
   if (!node) return;
   state.answerGraph = null;
   state.answerGraphNodes = new Map();
-  setActiveVault({ kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" });
+  setActiveVault(null);
   state.selectedId = id;
   if (options.focusGraph !== false) state.graphFocusId = id;
   renderGraph();
-  seedChat(node);
   await openDocument(`${state.index.processed_dir}/${node.path}`, stemOf(node.path), {
     editable: true,
     savePath: node.path,
@@ -928,11 +957,11 @@ function updateChatMessage(message, text, modifier = "") {
   message.innerHTML = renderMarkdownBody(text || "");
   els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
 }
-function seedChat(node) {
-  els.chatMessages.innerHTML = "";
-  addChatMessage("assistant", `Local AI context loaded: ${node.title}.`);
+function answerPreviewText(answer, limit = 420) {
+  const normalized = String(answer || "No answer returned.").replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, limit).replace(/\s+\S*$/, "")}...`;
 }
-
 function showChatTranscript(vault) {
   els.chatMessages.innerHTML = "";
   const messages = vault.messages || [];
@@ -940,53 +969,197 @@ function showChatTranscript(vault) {
     addChatMessage("assistant", "This local chat vault is empty. Ask a question to bind its first cache entry.");
     return;
   }
-  for (const message of messages) addChatMessage(message.role === "user" ? "user" : "assistant", message.content || "");
+  const turns = new Map();
+  for (const message of messages) {
+    if (message.result) {
+      renderAgentResult(addChatMessage("assistant", ""), message.result);
+      const answers = turns.get(message.turn) || [];
+      answers.push(message.result);
+      turns.set(message.turn, answers);
+      if (answers.length === 2) addComparison(answers);
+    } else addChatMessage(message.role === "user" ? "user" : "assistant", message.content || "");
+  }
+}
+
+function renderAgentResult(element, result) {
+  const naive = result.agent === "naive";
+  element.className = `chat-message assistant agent-answer ${naive ? "naive" : "finokf"}${result.ok === false ? " error" : ""}`;
+  element.dataset.expanded = "false";
+  const avatar = naive
+    ? '<circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/>'
+    : '<rect x="3" y="6" width="18" height="15" rx="4"/><path d="M12 2v4M8 12h1m6 0h1M8 17h8"/>';
+  element.innerHTML = `<div class="agent-heading"><svg class="agent-avatar" viewBox="0 0 24 24" role="img" aria-label="${naive ? "Naive researcher" : "FinOKF robot"} profile picture">${avatar}</svg><div><strong>${naive ? "Naive" : "FinOKF"}</strong><small>${naive ? "Independent web research · uncached" : "Local evidence + web research · cache enabled"}</small></div></div><div class="agent-preview">${escapeHtml(answerPreviewText(result.answer))}</div><div class="agent-body" hidden>${renderMarkdownBody(result.answer || "No answer returned.")}</div>`;
+  const answerButton = document.createElement("button");
+  answerButton.type = "button";
+  answerButton.className = "show-more-button";
+  answerButton.textContent = "Show more";
+  answerButton.setAttribute("aria-expanded", "false");
+  const body = element.querySelector(".agent-body");
+  const preview = element.querySelector(".agent-preview");
+  const extra = document.createElement("div");
+  extra.className = "agent-extra";
+  extra.hidden = true;
+  answerButton.addEventListener("click", () => {
+    const expanded = body.hidden;
+    body.hidden = !expanded;
+    preview.hidden = expanded;
+    extra.hidden = !expanded;
+    element.dataset.expanded = String(expanded);
+    answerButton.textContent = expanded ? "Show less" : "Show more";
+    answerButton.setAttribute("aria-expanded", String(expanded));
+    els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+  });
+  element.appendChild(answerButton);
+  if (result.sources?.length) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `Evidence supplied (${result.sources.length})`;
+    details.appendChild(summary);
+    for (const source of result.sources) {
+      const row = document.createElement("div");
+      if (typeof source === "string") {
+        row.textContent = source.includes("prices/") ? `Yahoo Finance · local CSV: ${source}` : source;
+      } else if (/^https?:\/\//.test(source.url || "")) {
+        const link = document.createElement("a");
+        link.href = source.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = source.title || source.url;
+        row.appendChild(link);
+      }
+      details.appendChild(row);
+    }
+    extra.appendChild(details);
+  }
+  if (result.warnings?.length) {
+    const warning = document.createElement("p");
+    warning.className = "agent-warning";
+    warning.textContent = `Some searches failed: ${result.warnings.join("; ")}`;
+    extra.appendChild(warning);
+  }
+  element.appendChild(extra);
+}
+
+function addComparison(answers) {
+  const naive = answers.find((answer) => answer.agent === "naive") || {};
+  const finokf = answers.find((answer) => answer.agent === "finokf") || {};
+  const wrapper = document.createElement("div");
+  wrapper.className = "agent-comparison";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "compare-button";
+  button.textContent = "Compare metadata";
+  button.setAttribute("aria-expanded", "false");
+  const panel = document.createElement("div");
+  panel.hidden = true;
+  const number = (value) => value == null ? "Unavailable" : Number(value).toLocaleString();
+  const rows = [
+    ["Status", (r) => r.ok ? "Answered" : "Failed"],
+    ["Provider / model", (r) => `${r.provider || "—"} / ${r.model || "—"}`],
+    ["Data access", (r) => r.data_access || "—"],
+    ["Route", (r) => r.route || "—"],
+    ["Cache hit", (r) => r.cache_hit ? "Yes" : "No"],
+    ["Elapsed (ms)", (r) => number(r.metrics?.total_ms)],
+    ["Model time (ms)", (r) => number(r.metrics?.model_ms)],
+    ["Input tokens", (r) => number(r.metrics?.prompt_tokens)],
+    ["Output tokens", (r) => number(r.metrics?.completion_tokens)],
+    ["Total tokens", (r) => number(r.metrics?.total_tokens)],
+    ["Web searches", (r) => number(r.metrics?.web_requests)],
+    ["Web pages fetched", (r) => number(r.metrics?.page_requests)],
+    ["Evidence sources", (r) => number(r.metrics?.source_count)],
+  ];
+  panel.innerHTML = `<table><caption>Measured for this question</caption><thead><tr><th scope="col">Metadata</th><th scope="col">Naive</th><th scope="col">FinOKF</th></tr></thead><tbody>${rows.map(([label, read]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(read(naive))}</td><td>${escapeHtml(read(finokf))}</td></tr>`).join("")}</tbody></table><p>Naive totals include query planning and synthesis. Cache replays consume zero new model tokens. Elapsed time includes shared-resource contention; speed and accuracy are not guaranteed.</p>`;
+  button.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    button.setAttribute("aria-expanded", String(!panel.hidden));
+  });
+  wrapper.append(button, panel);
+  els.chatMessages.appendChild(wrapper);
 }
 
 function clearVaultInspector() {
+  state.graphLoadSerial += 1;
   state.answerGraph = null;
   state.answerGraphNodes = new Map();
+  els.graphView.classList.remove("answer-mode");
   els.vaultInspector.hidden = true;
   els.vaultTitle.textContent = "No answer cached yet";
-  els.vaultSkill.textContent = "";
-  els.vaultChain.textContent = "";
-  els.vaultMetrics.innerHTML = "";
+  if (els.vaultSkill) {
+    els.vaultSkill.hidden = true;
+    els.vaultSkill.textContent = "";
+  }
+  if (els.vaultChain) els.vaultChain.textContent = "";
+  if (els.vaultMetrics) els.vaultMetrics.innerHTML = "";
 }
 
 function renderVaultInspector(vault) {
   els.vaultInspector.hidden = false;
   els.vaultTitle.textContent = vault.question || "Cached answer";
-  const lastRun = (vault.runs || []).at(-1) || {};
-  const metrics = vault.metrics || lastRun.metrics || {};
-  els.vaultSkill.textContent = lastRun.cache_hit ? "Cache hit" : (lastRun.route || vault.skill?.label || "Empty");
-  els.vaultChain.textContent = lastRun.program?.expression
-    ? `${lastRun.program.operation} · ${lastRun.program.expression}`
-    : ((vault.chain || []).join(" → ") || "No cache program has run yet.");
-  const cards = [
-    [metrics.total_ms != null ? `${Number(metrics.total_ms).toFixed(1)} ms` : "—", "Total latency"],
-    [metrics.total_tokens != null ? String(metrics.total_tokens) : "—", "Tokens"],
-    [lastRun.method || "—", "Method"],
-  ];
-  els.vaultMetrics.innerHTML = cards.map(([value, label]) => `
-    <div class="vault-metric"><span class="vault-metric-value">${escapeHtml(value)}</span><span class="vault-metric-label">${escapeHtml(label)}</span></div>
-  `).join("");
+  if (els.vaultSkill) {
+    els.vaultSkill.hidden = true;
+    els.vaultSkill.textContent = "";
+  }
+  if (els.vaultChain) els.vaultChain.textContent = "";
+  if (els.vaultMetrics) els.vaultMetrics.innerHTML = "";
+}
+
+function answerGraphData(vault, payload) {
+  const latestRun = (vault.runs || []).at(-1);
+  const runId = latestRun ? `${vault.vault_id}:${latestRun.turn}` : null;
+  const metadata = new Map((vault.nodes || []).map((node) => [node.id, node]));
+  let nodes = payload.nodes || [];
+  let links = payload.links || [];
+  if (vault.kind === "chat-vault" && latestRun) {
+    // Legacy graph files contain every conversation turn. Show only the
+    // current execution's actual bindings, including multi-company answers.
+    const evidenceIds = new Set(latestRun.evidence_nodes
+      ? latestRun.evidence_nodes.map((node) => node.id)
+      : links.filter((link) => link.source === runId).map((link) => link.target));
+    const answerIds = links
+      .filter((link) => link.source === runId && link.rel === "produces")
+      .map((link) => link.target);
+    const activeIds = new Set([vault.vault_id, runId, ...answerIds, ...evidenceIds]);
+    nodes = nodes.filter((node) => activeIds.has(node.id));
+    links = links.filter((link) => activeIds.has(link.source) && activeIds.has(link.target));
+  }
+  const unique = new Map();
+  const remap = new Map();
+  for (const node of nodes) {
+    const details = { ...metadata.get(node.id), ...node };
+    const sourcePath = normalizePath(details.source_path);
+    const identity = details.type === "finance.fact" ? `${sourcePath}#${details.source_id || details.id}` : sourcePath || details.id;
+    const canonicalId = unique.get(identity)?.id || details.id;
+    remap.set(details.id, canonicalId);
+    unique.set(identity, {
+      ...details,
+      id: canonicalId,
+      title: details.id === vault.vault_id && latestRun ? (latestRun.question || vault.question || details.title) : details.title,
+      ticker: details.ticker || sourcePath.match(/\/(?:filings|companies|entities)\/([^/.]+)/)?.[1] || "",
+      path: vault.graph_path ? resolveRelativePath(vault.graph_path, details.path || "") : (details.path || ""),
+    });
+  }
+  const uniqueLinks = new Map();
+  for (const link of links) {
+    const source = remap.get(link.source);
+    const target = remap.get(link.target);
+    if (source && target) uniqueLinks.set(`${source}:${target}:${link.rel}`, { ...link, source, target, directed: true });
+  }
+  return { nodes: [...unique.values()], links: [...uniqueLinks.values()], rootId: vault.vault_id, turn: latestRun?.turn };
 }
 
 async function applyAnswerGraph(vault) {
-  if (!vault?.graph && !vault?.graph_path) return;
-  let payload = vault.graph;
+  const serial = ++state.graphLoadSerial;
+  let payload = vault.graph || null;
   if (!payload && vault.graph_path) {
     const response = await fetch(documentUrl(vault.graph_path), { cache: "no-store" });
     if (!response.ok) throw new Error(`graph trace missing: HTTP ${response.status}`);
     payload = await response.json();
   }
-  const nodes = (payload.nodes || []).map((node) => ({
-    ...node,
-    path: vault.graph_path ? resolveRelativePath(vault.graph_path, node.path || "") : (node.path || ""),
-  }));
-  const links = (payload.links || []).map((link) => ({ ...link, directed: true }));
+  if (serial !== state.graphLoadSerial) return false;
+  const graph = answerGraphData(vault, payload || { nodes: [], links: [] });
+  const { nodes } = graph;
   state.answerGraphNodes = new Map(nodes.map((node) => [node.id, node]));
-  state.answerGraph = { nodes, links, rootId: vault.vault_id };
+  state.answerGraph = graph;
   state.selectedId = vault.vault_id || nodes[0]?.id || state.selectedId;
   state.graphFocusId = null;
   setActiveVault(vault);
@@ -995,32 +1168,12 @@ async function applyAnswerGraph(vault) {
   state.graph.reheat(0.9);
   setView("graph");
   setTimeout(() => state.graph.fit(true), 40);
+  return true;
 }
 
 async function selectVault(vault) {
-  if (vault.kind === "knowledge-graph") {
-    const previousContextId = state.currentVault?.context?.id;
-    if (previousContextId && state.nodeById.has(previousContextId)) state.selectedId = previousContextId;
-    clearVaultInspector();
-    setActiveVault(vault);
-    renderGraph();
-    state.graph.reheat(0.8);
-    setTimeout(() => state.graph.fit(true), 40);
-    if (state.selectedId && state.nodeById.has(state.selectedId)) {
-      const node = state.nodeById.get(state.selectedId);
-      seedChat(node);
-      await openDocument(`${state.index.processed_dir}/${node.path}`, stemOf(node.path), {
-        editable: true,
-        savePath: node.path,
-        showMarkdown: state.activeView === "markdown",
-      });
-    } else {
-      seedChat({ title: "Knowledge graph" });
-    }
-    return;
-  }
-  await applyAnswerGraph(vault);
-  showChatTranscript(vault);
+  if (state.agentRunning) return;
+  if (await applyAnswerGraph(vault)) showChatTranscript(vault);
 }
 
 function chatNeighbors(node) {
@@ -1036,36 +1189,45 @@ function chatNeighbors(node) {
   });
 }
 
-async function createLocalChatVault() {
-  const contextId = state.currentVault?.context?.id || state.selectedId;
-  const node = state.nodeById.get(contextId);
-  if (!node) throw new Error("select a company or filing before creating a chat vault");
-  const response = await fetch("/api/vaults", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title: `New ${node.ticker || "research"} chat`,
-      node: { id: node.id, title: node.title, type: node.type, ticker: node.ticker, path: node.path },
-    }),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-  const vault = result.vault;
-  state.vaults = [
-    state.vaults.find((item) => item.vault_id === "knowledge-graph") || { kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" },
-    vault,
-    ...state.vaults.filter((item) => item.vault_id !== "knowledge-graph" && item.vault_id !== vault.vault_id),
-  ];
-  state.vaultHistory = [vault, ...state.vaultHistory.filter((item) => item.vault_id !== vault.vault_id)];
-  renderVaultHistory();
-  await selectVault(vault);
-  els.chatInput.focus();
+async function readAgentStream(response, onAnswer) {
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({}));
+    throw new Error(failure.error || `HTTP ${response.status}`);
+  }
+  if (!response.headers.get("content-type")?.includes("application/x-ndjson")) {
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.error || "Research failed");
+    return result;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completed = null;
+  const consume = async (line) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line);
+    if (event.type === "answer") await onAnswer(event.answer, event.vault);
+    if (event.type === "complete") completed = event;
+  };
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let end;
+    while ((end = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 1);
+      await consume(line);
+    }
+    if (done) break;
+  }
+  await consume(buffer);
+  if (!completed) throw new Error("Connection ended before both agents finished. Completed answers are shown above.");
+  return completed;
 }
 
-async function askLocalModel(question) {
-  const contextId = state.currentVault?.kind === "chat-vault" ? state.currentVault?.context?.id : state.selectedId;
-  const node = state.nodeById.get(contextId) || state.nodeById.get(state.selectedId);
-  if (!node) throw new Error("open a note first so the model has context");
+async function askLocalModel(question, onAnswer) {
+  const contextId = state.currentVault?.kind === "chat-vault" ? state.currentVault?.context?.id : null;
+  const node = state.nodeById.get(contextId) || {};
   const providerConfig = selectedProviderConfig();
   if (!providerConfig) throw new Error("choose ChatGPT, Anthropic, or Local LLM from the key button first");
 
@@ -1074,29 +1236,27 @@ async function askLocalModel(question) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: question,
-      method: els.methodSelect.value,
+      stream: true,
       provider_config: providerConfig,
       vault_id: state.currentVault?.kind === "chat-vault" ? state.currentVault.vault_id : null,
-      markdown: state.editing ? els.docEditor.value : state.currentRaw,
+      markdown: contextId ? (state.editing ? els.docEditor.value : state.currentRaw) : "",
       node: {
-        id: node.id,
-        title: node.title,
-        type: node.type,
-        ticker: node.ticker,
-        path: node.path,
+        id: node.id || "",
+        title: node.title || "",
+        type: node.type || "",
+        ticker: node.ticker || "",
+        path: node.path || "",
         finokf: node.finokf || {},
       },
       neighbors: chatNeighbors(node),
     }),
   });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-  return result;
+  return readAgentStream(response, onAnswer);
 }
 
 async function submitChat(value) {
   const question = value.trim();
-  if (!question) return;
+  if (!question || state.agentRunning) return;
   if (!state.llmProvider) {
     setProviderPanel(true);
     addChatMessage("assistant", "Choose ChatGPT, Anthropic, or Local LLM from the key button first.", "error");
@@ -1105,18 +1265,38 @@ async function submitChat(value) {
   addChatMessage("user", question);
   els.chatInput.value = "";
   setAgentRunning(true);
-  const pending = addChatMessage("assistant", els.methodSelect.value === "auto" ? "Checking FinOKF facts, then retrieving grounded evidence if needed…" : "Running the naïve model baseline…", "pending");
+  const pendingNaive = addChatMessage("assistant", "");
+  const pendingFinokf = addChatMessage("assistant", "");
+  renderAgentResult(pendingNaive, { agent: "naive", answer: "Researching the web independently…" });
+  renderAgentResult(pendingFinokf, { agent: "finokf", answer: "Checking local facts, prices and cached answers…" });
+  pendingNaive.classList.add("pending");
+  pendingFinokf.classList.add("pending");
+  const completedAgents = new Set();
+  const receiveAnswer = async (answer, vault) => {
+    renderAgentResult(answer.agent === "naive" ? pendingNaive : pendingFinokf, answer);
+    completedAgents.add(answer.agent);
+    if (vault) {
+      try { await applyAnswerGraph(vault); }
+      catch (error) { addChatMessage("assistant", `Answer ready, but graph could not load: ${error.message}`, "error"); }
+    }
+  };
   try {
-    const result = await askLocalModel(question);
-    updateChatMessage(pending, result.answer || "The local model returned an empty answer.");
+    const result = await askLocalModel(question, receiveAnswer);
+    for (const answer of result.answers || []) {
+      if (!completedAgents.has(answer.agent)) await receiveAnswer(answer);
+    }
+    addComparison(result.answers || []);
+    if (result.persistence_error) addChatMessage("assistant", result.persistence_error, "error");
     if (result.vault) {
-      state.vaults = [state.vaults.find((item) => item.vault_id === "knowledge-graph") || { kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" }, result.vault, ...state.vaults.filter((item) => item.vault_id !== result.vault.vault_id && item.vault_id !== "knowledge-graph")];
+      state.vaults = [result.vault, ...state.vaults.filter((item) => item.vault_id !== result.vault.vault_id)];
       state.vaultHistory = [result.vault, ...state.vaultHistory.filter((item) => item.vault_id !== result.vault.vault_id)];
       renderVaultHistory();
       await applyAnswerGraph(result.vault);
     }
   } catch (error) {
-    updateChatMessage(pending, `Local AI is not ready: ${error.message}`, "error");
+    if (!completedAgents.has("naive")) renderAgentResult(pendingNaive, {agent: "naive", ok: false, answer: `Request failed: ${error.message}`});
+    if (!completedAgents.has("finokf")) renderAgentResult(pendingFinokf, {agent: "finokf", ok: false, answer: `Request failed: ${error.message}`});
+    if (completedAgents.size === 2) addChatMessage("assistant", error.message, "error");
   } finally {
     setAgentRunning(false);
     els.chatInput.focus();
@@ -1613,7 +1793,7 @@ class ForceGraph {
       const reveal = Math.min(this.revealProgress(a, now), this.revealProgress(b, now));
       if (reveal <= 0.01) continue;
       const lit = active && (active.has(a.id) && active.has(b.id) && (a.id === focusId || b.id === focusId));
-      const stroke = lit ? "rgba(213,223,201,0.72)" : active ? "rgba(150,150,150,0.035)" : "rgba(150,150,150,0.075)";
+      const stroke = lit ? "rgba(213,223,201,0.72)" : active ? "rgba(150,150,150,0.035)" : this.directed ? "rgba(174,184,160,0.38)" : "rgba(150,150,150,0.075)";
       ctx.strokeStyle = stroke;
       ctx.globalAlpha = reveal;
       ctx.beginPath();
@@ -1649,7 +1829,7 @@ class ForceGraph {
       ctx.strokeStyle = selected ? "#f2eee8" : "rgba(18,15,15,0.85)";
       ctx.stroke();
 
-      const labeled = hovered;
+      const labeled = hovered || (this.directed && this.nodes.length <= 24);
       if (labeled) {
         const fontPx = (selected || hovered ? 11.5 : 9) / t.k;
         ctx.font = `${selected || hovered ? 600 : 500} ${fontPx}px ${getComputedStyle(document.body).fontFamily}`;
@@ -1724,6 +1904,7 @@ function buildLegend() {
 
 /* ------------------------------------------------------------------ events */
 function bindEvents() {
+  els.homeButton.addEventListener("click", showHomeGraph);
   els.graphButton.addEventListener("click", () => setView("graph"));
   els.markdownButton.addEventListener("click", () => setView("markdown"));
   els.providerButton.addEventListener("click", () => {
@@ -1735,23 +1916,11 @@ function bindEvents() {
   els.providerChangeButton.addEventListener("click", clearProviderChoice);
 
   els.chatForm.addEventListener("submit", (event) => { event.preventDefault(); submitChat(els.chatInput.value); });
-  els.newChatButton.addEventListener("click", async () => {
-    toggleVaultHistory(false);
-    try {
-      await createLocalChatVault();
-    } catch (error) {
-      addChatMessage("assistant", `Could not create a local vault: ${error.message}`, "error");
-    }
-  });
   els.historyButton.addEventListener("click", () => toggleVaultHistory());
   els.vaultHistoryList.addEventListener("click", async (event) => {
     const item = event.target.closest(".vault-history-item");
     if (!item) return;
     toggleVaultHistory(false);
-    if (item.dataset.kind === "knowledge-graph") {
-      await selectVault({ kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" });
-      return;
-    }
     const vault = state.vaults.find((entry) => entry.vault_id === item.dataset.id);
     if (vault) await selectVault(vault);
   });
@@ -1786,26 +1955,6 @@ function bindEvents() {
     if (!event.target.closest(".provider-panel") && !event.target.closest("#providerButton")) setProviderPanel(false);
   });
 
-  document.querySelectorAll(".graph-controls button").forEach((button) => {
-    button.addEventListener("click", () => {
-      const zoom = button.dataset.zoom;
-      if (zoom === "in") state.graph.zoomBy(1.25);
-      else if (zoom === "out") state.graph.zoomBy(1 / 1.25);
-      else if (zoom === "reset") state.graph.fit(true);
-      else if (button.dataset.graph === "home") {
-        if (state.answerGraph) {
-          renderGraph();
-          state.graph.reheat(0.5);
-          setTimeout(() => state.graph.fit(true), 40);
-        } else {
-          state.graphFocusId = null;
-          renderGraph();
-          state.graph.reheat(0.9);
-          setTimeout(() => state.graph.fit(true), 40);
-        }
-      }
-    });
-  });
 }
 
 function handleGraphSelect(id) {
@@ -1813,7 +1962,6 @@ function handleGraphSelect(id) {
     const node = state.answerGraphNodes.get(id);
     state.selectedId = id;
     renderGraph();
-    if (node?.type === "certifacts.answer") return;
     if (node?.path) openDocument(node.path, node.title || stemOf(node.path), { editable: false, showMarkdown: true });
     return;
   }
@@ -1830,14 +1978,8 @@ async function init() {
     state.graph = new ForceGraph(els.canvas, (id) => handleGraphSelect(id));
     bindEvents();
     renderProviderControls();
-    renderGraph();
-    clearVaultInspector();
-    setActiveVault({ kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" });
     toggleVaultHistory(false);
-    seedChat({ title: "Vault context" });
-    const companyFirst = state.index.companies?.[0]?.id;
-    const first = state.nodeById.has(companyFirst) ? companyFirst : state.nodes[0]?.id;
-    if (first) openNode(first, { showMarkdown: false, focusGraph: false });
+    showHomeGraph();
   } catch (error) {
     els.docRendered.textContent = error.message;
     setView("markdown");
