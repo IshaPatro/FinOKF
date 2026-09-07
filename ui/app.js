@@ -30,6 +30,9 @@ const state = {
   answerGraphNodes: new Map(),
   vaultHistory: [],
   vaultHistoryOpen: false,
+  providerPanelOpen: false,
+  llmProvider: "",
+  agentRunning: false,
 };
 
 const NODE_COLORS = {
@@ -81,6 +84,17 @@ const els = {
   markdownView: document.getElementById("markdownView"),
   graphButton: document.getElementById("graphViewButton"),
   markdownButton: document.getElementById("markdownViewButton"),
+  providerButton: document.getElementById("providerButton"),
+  providerPanel: document.getElementById("providerPanel"),
+  providerChoices: [...document.querySelectorAll(".provider-choice")],
+  providerFields: [...document.querySelectorAll("[data-provider-fields]")],
+  providerChangeButton: document.getElementById("providerChangeButton"),
+  openaiApiKey: document.getElementById("openaiApiKey"),
+  openaiModel: document.getElementById("openaiModel"),
+  anthropicApiKey: document.getElementById("anthropicApiKey"),
+  anthropicModel: document.getElementById("anthropicModel"),
+  ollamaUrl: document.getElementById("ollamaUrl"),
+  ollamaModel: document.getElementById("ollamaModel"),
   chatMessages: document.getElementById("chatMessages"),
   chatForm: document.getElementById("chatForm"),
   chatInput: document.getElementById("chatInput"),
@@ -207,6 +221,80 @@ function setView(view) {
   els.graphButton.classList.toggle("active", view === "graph");
   els.markdownButton.classList.toggle("active", view === "markdown");
   if (view === "graph" && state.graph) requestAnimationFrame(() => state.graph.resize());
+}
+
+function setProviderPanel(open) {
+  state.providerPanelOpen = Boolean(open);
+  els.providerPanel.hidden = !state.providerPanelOpen;
+  els.providerButton.classList.toggle("active", state.providerPanelOpen || Boolean(state.llmProvider));
+  els.providerButton.setAttribute("aria-expanded", String(state.providerPanelOpen));
+}
+
+function selectedProviderConfig() {
+  if (state.llmProvider === "openai") {
+    return {
+      provider: "openai",
+      api_key: els.openaiApiKey.value.trim(),
+      model: els.openaiModel.value.trim(),
+    };
+  }
+  if (state.llmProvider === "anthropic") {
+    return {
+      provider: "anthropic",
+      api_key: els.anthropicApiKey.value.trim(),
+      model: els.anthropicModel.value.trim(),
+    };
+  }
+  if (state.llmProvider === "ollama") {
+    return {
+      provider: "ollama",
+      url: els.ollamaUrl.value.trim(),
+      model: els.ollamaModel.value.trim(),
+    };
+  }
+  return null;
+}
+
+function renderProviderControls() {
+  for (const button of els.providerChoices) {
+    const chosen = button.dataset.provider === state.llmProvider;
+    button.classList.toggle("active", chosen);
+    button.disabled = state.agentRunning || Boolean(state.llmProvider && !chosen);
+    button.setAttribute("aria-pressed", String(chosen));
+  }
+  for (const group of els.providerFields) {
+    const shown = group.dataset.providerFields === state.llmProvider;
+    group.hidden = !shown;
+    group.querySelectorAll("input").forEach((input) => {
+      input.disabled = state.agentRunning || !shown;
+    });
+  }
+  els.providerChangeButton.disabled = state.agentRunning || !state.llmProvider;
+  els.providerButton.disabled = state.agentRunning;
+  els.providerButton.classList.toggle("connected", Boolean(state.llmProvider));
+  if (state.agentRunning) setProviderPanel(false);
+}
+
+function chooseProvider(provider) {
+  if (state.agentRunning || state.llmProvider) return;
+  state.llmProvider = provider;
+  renderProviderControls();
+  const firstField = els.providerPanel.querySelector(`[data-provider-fields="${provider}"] input`);
+  if (firstField) firstField.focus();
+}
+
+function clearProviderChoice() {
+  if (state.agentRunning) return;
+  state.llmProvider = "";
+  renderProviderControls();
+}
+
+function setAgentRunning(running) {
+  state.agentRunning = Boolean(running);
+  renderProviderControls();
+  els.chatInput.disabled = state.agentRunning;
+  els.chatButton.disabled = state.agentRunning;
+  els.methodSelect.disabled = state.agentRunning;
 }
 
 /* ------------------------------------------------------------------ graph data selection */
@@ -738,9 +826,11 @@ async function openDocument(path, title, options = {}) {
   let text;
   try {
     const response = await fetch(documentUrl(path), { cache: "no-store" });
-    text = response.ok ? await response.text() : `# ${title}\n\nMarkdown file could not be loaded.`;
-  } catch {
-    text = `# ${title}\n\nMarkdown file could not be loaded.`;
+    text = response.ok
+      ? await response.text()
+      : `# ${title}\n\nMarkdown file could not be loaded from \`${path}\`.\n\nHTTP status: ${response.status}`;
+  } catch (error) {
+    text = `# ${title}\n\nMarkdown file could not be loaded from \`${path}\`.\n\n${error.message}`;
   }
 
   state.currentEditable = Boolean(options.editable);
@@ -976,6 +1066,8 @@ async function askLocalModel(question) {
   const contextId = state.currentVault?.kind === "chat-vault" ? state.currentVault?.context?.id : state.selectedId;
   const node = state.nodeById.get(contextId) || state.nodeById.get(state.selectedId);
   if (!node) throw new Error("open a note first so the model has context");
+  const providerConfig = selectedProviderConfig();
+  if (!providerConfig) throw new Error("choose ChatGPT, Anthropic, or Local LLM from the key button first");
 
   const response = await fetch("/api/chat", {
     method: "POST",
@@ -983,6 +1075,7 @@ async function askLocalModel(question) {
     body: JSON.stringify({
       message: question,
       method: els.methodSelect.value,
+      provider_config: providerConfig,
       vault_id: state.currentVault?.kind === "chat-vault" ? state.currentVault.vault_id : null,
       markdown: state.editing ? els.docEditor.value : state.currentRaw,
       node: {
@@ -1004,10 +1097,14 @@ async function askLocalModel(question) {
 async function submitChat(value) {
   const question = value.trim();
   if (!question) return;
+  if (!state.llmProvider) {
+    setProviderPanel(true);
+    addChatMessage("assistant", "Choose ChatGPT, Anthropic, or Local LLM from the key button first.", "error");
+    return;
+  }
   addChatMessage("user", question);
   els.chatInput.value = "";
-  els.chatInput.disabled = true;
-  els.chatButton.disabled = true;
+  setAgentRunning(true);
   const pending = addChatMessage("assistant", els.methodSelect.value === "auto" ? "Checking FinOKF facts, then retrieving grounded evidence if needed…" : "Running the naïve model baseline…", "pending");
   try {
     const result = await askLocalModel(question);
@@ -1021,8 +1118,7 @@ async function submitChat(value) {
   } catch (error) {
     updateChatMessage(pending, `Local AI is not ready: ${error.message}`, "error");
   } finally {
-    els.chatInput.disabled = false;
-    els.chatButton.disabled = false;
+    setAgentRunning(false);
     els.chatInput.focus();
   }
 }
@@ -1630,6 +1726,13 @@ function buildLegend() {
 function bindEvents() {
   els.graphButton.addEventListener("click", () => setView("graph"));
   els.markdownButton.addEventListener("click", () => setView("markdown"));
+  els.providerButton.addEventListener("click", () => {
+    if (!state.agentRunning) setProviderPanel(!state.providerPanelOpen);
+  });
+  for (const button of els.providerChoices) {
+    button.addEventListener("click", () => chooseProvider(button.dataset.provider));
+  }
+  els.providerChangeButton.addEventListener("click", clearProviderChoice);
 
   els.chatForm.addEventListener("submit", (event) => { event.preventDefault(); submitChat(els.chatInput.value); });
   els.newChatButton.addEventListener("click", async () => {
@@ -1680,6 +1783,7 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".graph-search")) els.searchResults.classList.remove("open");
     if (!event.target.closest(".vault-switcher-dock")) toggleVaultHistory(false);
+    if (!event.target.closest(".provider-panel") && !event.target.closest("#providerButton")) setProviderPanel(false);
   });
 
   document.querySelectorAll(".graph-controls button").forEach((button) => {
@@ -1725,6 +1829,7 @@ async function init() {
     buildLegend();
     state.graph = new ForceGraph(els.canvas, (id) => handleGraphSelect(id));
     bindEvents();
+    renderProviderControls();
     renderGraph();
     clearVaultInspector();
     setActiveVault({ kind: "knowledge-graph", vault_id: "knowledge-graph", title: "Knowledge graph" });

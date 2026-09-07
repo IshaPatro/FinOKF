@@ -20,6 +20,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   width: 100%;
@@ -94,10 +95,111 @@ button { border: 0; }
   color: var(--accent-2);
   box-shadow: inset 0 0 0 1px rgba(174,184,160,0.18);
 }
+.view-button.connected {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+.view-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
 .view-button svg {
   width: 18px; height: 18px;
   fill: none; stroke: currentColor;
   stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.provider-toggle { margin-top: auto; }
+.provider-panel {
+  position: absolute;
+  z-index: 40;
+  left: 48px;
+  bottom: 14px;
+  width: min(320px, calc(100vw - 72px));
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: rgba(29,25,25,0.98);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.46);
+  color: var(--text);
+}
+.provider-panel-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+.provider-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.provider-choice,
+.provider-change {
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11.5px;
+  transition: border-color .15s, color .15s, background .15s, opacity .15s;
+}
+.provider-choice:hover,
+.provider-change:hover,
+.provider-choice.active {
+  border-color: var(--accent);
+  color: var(--accent-2);
+  background: var(--panel-3);
+}
+.provider-choice:disabled,
+.provider-change:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+.provider-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.provider-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.provider-fields label {
+  display: grid;
+  gap: 5px;
+}
+.provider-fields span {
+  color: var(--quiet);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.provider-fields input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.provider-fields input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(174,184,160,0.12);
+}
+.provider-fields input:disabled {
+  opacity: 0.58;
+}
+.provider-change {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .view-stack {

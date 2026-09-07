@@ -78,40 +78,31 @@ python3 scripts/fix_markdown_tables.py --input-dir data/raw/filings --output-dir
 
 ## Website
 
-Runs the backend and UI on port `8770`. Every local chat is saved as a switchable clearbox vault under `data/vaults/answers`, including its transcript, cache program, bound facts, and measurements.
+Runs the backend and UI on port `8770`. Every chat is saved as a switchable clearbox vault under `data/vaults/answers`, including its transcript, cache program, bound facts, and measurements.
 
 ```bash
-python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770 --no-llm
+python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770
 ```
 
-With local Ollama fallback:
+Local LLM uses Ollama. Start Ollama and make sure the default model is available:
 
 ```bash
-python3 scripts/serve_vault.py --processed-dir data/processed --vaults-dir data/vaults/answers --host 127.0.0.1 --port 8770 --llm-url http://127.0.0.1:11434 --llm-model llama3.2:3b
+brew install ollama
+ollama serve
+ollama pull llama3.2:3b
 ```
 
-With OpenAI as the grounded fallback, set the key in the server shell (never in the browser) and start the provider explicitly:
+Open `http://127.0.0.1:8770/ui/index.html`, click the key button on the left rail, and choose **ChatGPT**, **Anthropic**, or **Local LLM**. ChatGPT/OpenAI and Anthropic API keys are entered only in the UI; FinOKF sends them with the current request and does not store them. Local LLM does not need an API key and defaults to `llama3.2:3b` at `http://127.0.0.1:11434`.
 
-```powershell
-$env:OPENAI_API_KEY="your_api_key_here"
-.\.venv\Scripts\python.exe scripts\serve_vault.py --processed-dir data\processed --vaults-dir data\vaults\answers --host 127.0.0.1 --port 8770 --llm-provider openai --llm-model gpt-5-mini
-```
-
-The UI defaults to **Automatic**: it first attempts deterministic FlashOKF lookup/arithmetic on simple queries, then retrieves a small set of relevant filing excerpts and calls the configured fallback model ONLY when there are no simple compiled program matches. **ollama-grounded-fallback** is then attempted, this is a lightweight local model capable of reasoning and retrieval to answer questions. **Naïve LLM** remains available as a baseline; it sends the selected note without the retrieval augmentation and returns a full online LLM response.
-
-Open:
-
-```text
-http://127.0.0.1:8770/ui/index.html
-```
+The UI defaults to **Automatic**: it first attempts deterministic FlashOKF lookup/arithmetic on simple queries, then retrieves a small set of relevant filing excerpts and calls the selected fallback provider only when there are no simple compiled program matches. **Naïve LLM** remains available as a baseline; it sends the selected note without the retrieval augmentation and returns a full model response.
 
 ## Local latency check
 
-Measured on 2026-07-16 with warm `llama3.2:3b` over three AAPL questions: 2025 revenue, gross margin, and revenue growth. Total latency includes routing, binding, model time when used, and writing the visible chat vault.
+Measured on 2026-07-16 over three AAPL questions: 2025 revenue, gross margin, and revenue growth. Total latency includes routing, binding, model time when used, and writing the visible chat vault.
 
 | Method | Route | Runs | Avg total latency | Median latency | Avg prompt tokens | Avg completion tokens | Cache hits |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Naïve | Full Markdown → local Llama | 3 | 8,383.51 ms | 7,451.68 ms | 4,158 | 237 | 0/3 |
+| Naïve | Full Markdown → local LLM | 3 | 8,383.51 ms | 7,451.68 ms | 4,158 | 237 | 0/3 |
 | FlashOKF | Compiled fact program | 3 | 6.18 ms | 5.62 ms | 0 | 0 | 3/3 |
 
-For this exact-query workload, FlashOKF was **1,356× faster** because verified cache programs answered without invoking the model. Uncached questions still fall back to the local Llama path and if that is not suitable, an external LLM.
+For this exact-query workload, FlashOKF was **1,356× faster** because verified cache programs answered without invoking the model. Uncached questions still fall back to the selected model provider.

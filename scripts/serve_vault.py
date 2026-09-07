@@ -42,6 +42,12 @@ LLM_MODEL = "llama3.2:3b"
 LLM_TIMEOUT = 180
 LLM_ENABLED = True
 LLM_PROVIDER = "ollama"
+LLM_PROVIDER_CHOICES = {"ollama", "openai", "anthropic"}
+LLM_DEFAULT_MODELS = {
+    "ollama": "llama3.2:3b",
+    "openai": "gpt-5-mini",
+    "anthropic": "claude-sonnet-5",
+}
 FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
 RESPONSE_CACHE_SIZE = 128
 RESPONSE_LRU: OrderedDict[str, dict] = OrderedDict()
@@ -58,6 +64,43 @@ COMMON_TICKER_ALIASES = {
     "nvidia": "NVDA",
     "tesla": "TSLA",
 }
+
+
+def normalize_llm_provider(provider: str | None) -> str:
+    value = str(provider or LLM_PROVIDER or "ollama").strip().lower()
+    aliases = {
+        "chatgpt": "openai",
+        "local": "ollama",
+        "llama": "ollama",
+        "local-llama": "ollama",
+        "local_llama": "ollama",
+        "local llm": "ollama",
+        "local-llm": "ollama",
+        "local_llm": "ollama",
+    }
+    value = aliases.get(value, value)
+    if value not in LLM_PROVIDER_CHOICES:
+        raise ValueError("provider must be one of: openai, anthropic, ollama")
+    return value
+
+
+def default_llm_model(provider: str) -> str:
+    return LLM_DEFAULT_MODELS.get(provider, LLM_DEFAULT_MODELS["ollama"])
+
+
+def llm_config_from_payload(payload: dict) -> dict[str, str]:
+    raw_config = payload.get("provider_config") if isinstance(payload.get("provider_config"), dict) else {}
+    provider = normalize_llm_provider(raw_config.get("provider") or payload.get("llm_provider"))
+    model = str(raw_config.get("model") or payload.get("llm_model") or "").strip() or (
+        LLM_MODEL if provider == LLM_PROVIDER else default_llm_model(provider)
+    )
+    config = {
+        "provider": provider,
+        "model": model,
+        "url": str(raw_config.get("url") or raw_config.get("base_url") or payload.get("llm_url") or LLM_URL).strip(),
+        "api_key": str(raw_config.get("api_key") or "").strip(),
+    }
+    return config
 
 
 def slugify(text: str) -> str:
@@ -816,9 +859,12 @@ def compile_flashokf(question: str, ticker: str) -> dict:
     }
 
 
-def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
+def call_ollama(system_prompt: str, user_prompt: str, config: dict[str, str] | None = None) -> tuple[str, dict, float]:
+    config = config or {}
+    model = config.get("model") or LLM_MODEL
+    llm_url = config.get("url") or LLM_URL
     request_payload = {
-        "model": LLM_MODEL,
+        "model": model,
         "stream": False,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -828,13 +874,22 @@ def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     }
     started = time.perf_counter_ns()
     req = urlrequest.Request(
-        f"{LLM_URL.rstrip('/')}/api/chat",
+        f"{llm_url.rstrip('/')}/api/chat",
         data=json.dumps(request_payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
-        result = json.loads(response.read() or b"{}")
+    try:
+        with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
+            result = json.loads(response.read() or b"{}")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        if exc.code == 404:
+            raise RuntimeError(
+                f"Ollama model `{model}` was not found at {llm_url}. "
+                f"Pick an installed model from `ollama list` or run `ollama pull {model}`. {detail}".strip()
+            ) from exc
+        raise RuntimeError(f"Ollama API request failed ({exc.code}): {detail}") from exc
     model_ms = (time.perf_counter_ns() - started) / 1_000_000
     answer = ((result.get("message") or {}).get("content") or result.get("response") or "").strip()
     usage = {
@@ -847,13 +902,14 @@ def call_ollama(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     return answer, usage, model_ms
 
 
-def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
-    """Call the Responses API using the server-side OPENAI_API_KEY only."""
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+def call_openai(system_prompt: str, user_prompt: str, config: dict[str, str] | None = None) -> tuple[str, dict, float]:
+    """Call the Responses API with an ephemeral request key from the UI."""
+    config = config or {}
+    api_key = (config.get("api_key") or "").strip()
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is not set. Set it in your shell before starting the server.")
+        raise RuntimeError("Connect a ChatGPT/OpenAI API key in the UI before asking the model.")
     request_payload = {
-        "model": LLM_MODEL,
+        "model": config.get("model") or LLM_MODEL,
         "instructions": system_prompt,
         "input": user_prompt,
         "store": False,
@@ -891,16 +947,70 @@ def call_openai(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]
     return answer, usage, model_ms
 
 
-def call_llm(system_prompt: str, user_prompt: str) -> tuple[str, dict, float]:
-    if LLM_PROVIDER == "openai":
-        return call_openai(system_prompt, user_prompt)
-    return call_ollama(system_prompt, user_prompt)
+def call_anthropic(system_prompt: str, user_prompt: str, config: dict[str, str] | None = None) -> tuple[str, dict, float]:
+    """Call Anthropic Messages with an ephemeral request key from the UI."""
+    config = config or {}
+    api_key = (config.get("api_key") or "").strip()
+    if not api_key:
+        raise RuntimeError("Connect an Anthropic API key in the UI before asking the model.")
+    request_payload = {
+        "model": config.get("model") or default_llm_model("anthropic"),
+        "max_tokens": 1200,
+        "temperature": 0.2,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    started = time.perf_counter_ns()
+    req = urlrequest.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps(request_payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
+            result = json.loads(response.read() or b"{}")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:800]
+        raise RuntimeError(f"Anthropic API request failed ({exc.code}): {detail}") from exc
+    model_ms = (time.perf_counter_ns() - started) / 1_000_000
+    parts = [str(item.get("text") or "") for item in result.get("content") or [] if item.get("type") == "text"]
+    answer = "\n".join(part for part in parts if part).strip()
+    if not answer:
+        raise RuntimeError("Anthropic returned no text output.")
+    api_usage = result.get("usage") or {}
+    input_tokens = int(api_usage.get("input_tokens") or 0)
+    output_tokens = int(api_usage.get("output_tokens") or 0)
+    usage = {
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "ollama_total_ms": 0,
+        "ollama_load_ms": 0,
+    }
+    return answer, usage, model_ms
 
 
-def response_cache_key(method: str, system_prompt: str, user_prompt: str) -> str:
+def call_llm(system_prompt: str, user_prompt: str, config: dict[str, str] | None = None) -> tuple[str, dict, float]:
+    config = config or {"provider": LLM_PROVIDER, "model": LLM_MODEL, "url": LLM_URL, "api_key": ""}
+    provider = normalize_llm_provider(config.get("provider"))
+    if provider == "openai":
+        return call_openai(system_prompt, user_prompt, config)
+    if provider == "anthropic":
+        return call_anthropic(system_prompt, user_prompt, config)
+    return call_ollama(system_prompt, user_prompt, config)
+
+
+def response_cache_key(method: str, system_prompt: str, user_prompt: str, config: dict[str, str] | None = None) -> str:
+    config = config or {"provider": LLM_PROVIDER, "model": LLM_MODEL, "url": LLM_URL}
     payload = {
-        "provider": LLM_PROVIDER,
-        "model": LLM_MODEL,
+        "provider": normalize_llm_provider(config.get("provider")),
+        "model": config.get("model") or LLM_MODEL,
+        "url": config.get("url") or "",
         "method": method,
         "system_prompt": system_prompt,
         "user_prompt": user_prompt,
@@ -1683,6 +1793,11 @@ class Handler(SimpleHTTPRequestHandler):
         if method not in {"auto", "naive"}:
             self._json(400, {"ok": False, "error": "method must be auto or naive"})
             return
+        try:
+            llm_config = llm_config_from_payload(payload)
+        except ValueError as exc:
+            self._json(400, {"ok": False, "error": str(exc)})
+            return
 
         try:
             _browser_index, node_by_id = load_browser_index()
@@ -1775,7 +1890,7 @@ class Handler(SimpleHTTPRequestHandler):
                     f"{investment_instruction}"
                     f"{evidence_context}\n\nQuestion: {message}"
                 )
-            cache_key = response_cache_key(method, system_prompt, user_prompt)
+            cache_key = response_cache_key(method, system_prompt, user_prompt, llm_config)
             cached_response = response_cache_get(cache_key)
             if cached_response:
                 answer = str(cached_response.get("answer") or "")
@@ -1784,13 +1899,13 @@ class Handler(SimpleHTTPRequestHandler):
                 llm_cache_hit = True
             else:
                 try:
-                    answer, usage, model_ms = call_llm(system_prompt, user_prompt)
+                    answer, usage, model_ms = call_llm(system_prompt, user_prompt, llm_config)
                 except Exception as exc:
-                    provider = "OpenAI" if LLM_PROVIDER == "openai" else "Ollama"
+                    provider = {"openai": "ChatGPT/OpenAI", "anthropic": "Anthropic", "ollama": "Local LLM/Ollama"}[llm_config["provider"]]
                     self._json(502, {"ok": False, "error": f"{provider} model request failed: {exc}"})
                     return
                 response_cache_put(cache_key, {"answer": answer, "usage": usage})
-            route = f"{LLM_PROVIDER}-grounded-fallback" if method == "auto" else f"{LLM_PROVIDER}-naive"
+            route = f"{llm_config['provider']}-grounded-fallback" if method == "auto" else f"{llm_config['provider']}-naive"
 
         before_persist_ms = (time.perf_counter_ns() - total_started) / 1_000_000
         metrics = {
@@ -1805,7 +1920,13 @@ class Handler(SimpleHTTPRequestHandler):
             "method": method,
             "route": route,
             "cache_hit": bool(compiled.get("hit")) or llm_cache_hit,
-            "program": compiled.get("program") or {"operation": "llm_fallback", "reason": compiled.get("reason", "grounded fallback" if method == "auto" else "naive baseline")},
+            "program": compiled.get("program") or {
+                "operation": "llm_fallback",
+                "reason": compiled.get("reason", "grounded fallback" if method == "auto" else "naive baseline"),
+                "provider": llm_config["provider"],
+                "model": llm_config["model"],
+                "url": llm_config["url"] if llm_config["provider"] == "ollama" else "",
+            },
             "bindings": compiled.get("bindings") or [],
             "metrics": metrics,
         }
@@ -1848,7 +1969,8 @@ class Handler(SimpleHTTPRequestHandler):
             200,
             {
                 "ok": True,
-                "model": LLM_MODEL,
+                "model": llm_config["model"],
+                "provider": llm_config["provider"],
                 "answer": answer,
                 "method": method,
                 "route": route,
@@ -1878,7 +2000,7 @@ def main() -> int:
     parser.add_argument("--vaults-dir", default=str(DATA_ROOT / "vaults" / "answers"), help="Answer vault directory.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8770)
-    parser.add_argument("--llm-provider", choices=["ollama", "openai"], default=os.environ.get("FINOKF_LLM_PROVIDER", "ollama"), help="Fallback LLM provider.")
+    parser.add_argument("--llm-provider", choices=sorted(LLM_PROVIDER_CHOICES), default=os.environ.get("FINOKF_LLM_PROVIDER", "ollama"), help="Fallback LLM provider.")
     parser.add_argument("--llm-url", default=os.environ.get("FINOKF_LLM_URL", LLM_URL), help="Local Ollama URL.")
     parser.add_argument("--llm-model", default=os.environ.get("FINOKF_LLM_MODEL"), help="Provider model name (defaults by provider).")
     parser.add_argument("--no-llm", action="store_true", help="Run the UI and FlashOKF path without a model fallback.")
@@ -1902,7 +2024,7 @@ def main() -> int:
     VAULTS.mkdir(parents=True, exist_ok=True)
     LLM_PROVIDER = args.llm_provider
     LLM_URL = args.llm_url
-    LLM_MODEL = args.llm_model or ("gpt-5-mini" if LLM_PROVIDER == "openai" else "llama3.2:3b")
+    LLM_MODEL = args.llm_model or default_llm_model(LLM_PROVIDER)
     LLM_TIMEOUT = args.llm_timeout
     LLM_ENABLED = not args.no_llm
     RESPONSE_CACHE_SIZE = max(0, args.response_cache_size)
