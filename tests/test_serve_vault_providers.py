@@ -145,6 +145,7 @@ class ProviderConfigTests(unittest.TestCase):
         self.assertEqual(captured["body"]["model"], "claude-sonnet-5")
         self.assertEqual(captured["body"]["system"], "system prompt")
         self.assertEqual(captured["body"]["messages"][0]["content"], "user prompt")
+        self.assertNotIn("temperature", captured["body"])
 
 
 class BytesResponse:

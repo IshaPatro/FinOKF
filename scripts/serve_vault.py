@@ -1241,7 +1241,6 @@ def call_anthropic(system_prompt: str, user_prompt: str, config: dict[str, str] 
     request_payload = {
         "model": config.get("model") or default_llm_model("anthropic"),
         "max_tokens": 1200,
-        "temperature": 0.2,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}],
     }

@@ -1006,6 +1006,12 @@ function answerPreviewText(answer, limit = 420) {
   if (normalized.length <= limit) return normalized;
   return `${normalized.slice(0, limit).replace(/\s+\S*$/, "")}...`;
 }
+function answerPreviewMarkup(answer, limit = 420) {
+  const normalized = String(answer || "No answer returned.").replace(/\r\n/g, "\n").trim();
+  if (normalized.length <= limit) return renderMarkdownBody(normalized);
+  const clipped = normalized.slice(0, limit).replace(/\s+\S*$/, "");
+  return `${renderMarkdownBody(clipped)}<span class="preview-ellipsis">...</span>`;
+}
 function showChatTranscript(vault) {
   els.chatMessages.innerHTML = "";
   const messages = vault.messages || [];
@@ -1032,7 +1038,7 @@ function renderAgentResult(element, result) {
   const avatar = naive
     ? '<circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/>'
     : '<rect x="3" y="6" width="18" height="15" rx="4"/><path d="M12 2v4M8 12h1m6 0h1M8 17h8"/>';
-  element.innerHTML = `<div class="agent-heading"><svg class="agent-avatar" viewBox="0 0 24 24" role="img" aria-label="${naive ? "Naive researcher" : "FinOKF robot"} profile picture">${avatar}</svg><div><strong>${naive ? "Naive" : "FinOKF"}</strong><small>${naive ? "Independent web research · uncached" : "Local evidence + web research · cache enabled"}</small></div></div><div class="agent-preview">${escapeHtml(answerPreviewText(result.answer))}</div><div class="agent-body" hidden>${renderMarkdownBody(result.answer || "No answer returned.")}</div>`;
+  element.innerHTML = `<div class="agent-heading"><svg class="agent-avatar" viewBox="0 0 24 24" role="img" aria-label="${naive ? "Naive researcher" : "FinOKF robot"} profile picture">${avatar}</svg><div><strong>${naive ? "Naive" : "FinOKF"}</strong><small>${naive ? "Independent web research · uncached" : "Local evidence + web research · cache enabled"}</small></div></div><div class="agent-preview">${answerPreviewMarkup(result.answer)}</div><div class="agent-body" hidden>${renderMarkdownBody(result.answer || "No answer returned.")}</div>`;
   const answerButton = document.createElement("button");
   answerButton.type = "button";
   answerButton.className = "show-more-button";

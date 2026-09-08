@@ -17,15 +17,6 @@ Downloads daily Yahoo Finance OHLCV, adjusted close, dividends, and splits for t
 python3 scripts/download_yahoo_prices.py --universe sp100 --output-dir data/prices/sp100_yahoo --start 2020-01-01 --end 2026-12-31 --max-requests-per-second 0.5 --skip-existing
 ```
 
-## Macro layer
-
-Downloads a broad FRED macro panel from January 2020 to July 15, 2026, with one CSV per series plus metadata and a resumable manifest.
-
-```bash
-export FRED_API_KEY="your_fred_api_key_here"
-python3 scripts/download_fred_macro.py --output-dir data/macro/fred --start 2020-01-01 --end 2026-07-15 --max-requests-per-second 1 --skip-existing
-```
-
 ## Markdown vault (corpus layer)
 
 Converts SEC data into Markdown and builds per-company FinOKF fact bindings for low-latency, provenance-preserving queries. It also writes the complete tag inventory to `data/unique-tags.json`.

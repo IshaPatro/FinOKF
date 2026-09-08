@@ -204,11 +204,13 @@ test("agent answers render collapsed with a show more toggle", () => {
   context.fakeChatMessages = { scrollTop: 0, scrollHeight: 120 };
   vm.runInContext("els.chatMessages = fakeChatMessages;", context);
   const card = fakeElement();
-  context.renderAgentResult(card, {agent: "finokf", ok: true, answer: "First paragraph. " + "Detailed evidence. ".repeat(80)});
+  context.renderAgentResult(card, {agent: "finokf", ok: true, answer: "## Conclusion\n\n**Supported** result. " + "Detailed evidence. ".repeat(80)});
 
   const button = card.children.find(child => child.className === "show-more-button");
   assert.equal(card.dataset.expanded, "false");
   assert.equal(button.textContent, "Show more");
+  assert.match(card.html, /<h2>Conclusion<\/h2>/);
+  assert.match(card.html, /<strong>Supported<\/strong>/);
   assert.equal(card.querySelector(".agent-body").hidden, true);
   assert.equal(card.children.find(child => child.className === "agent-extra").hidden, true);
 
