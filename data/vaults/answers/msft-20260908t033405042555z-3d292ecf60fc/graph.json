@@ -1,0 +1,505 @@
+{
+  "scope": "vault",
+  "turn": 5,
+  "nodes": [
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc",
+      "title": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "type": "finokf.chat_vault",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/turns/turn-005.md"
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:1",
+      "title": "Turn 1 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/cache/turn-001-program.md",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "How did the profitability of Microsoft's growth change across FY2023, FY2024 and FY2025? Assess consolidated operating leverage and whether the profitability of additional revenue strengthened or weakened.",
+      "cache_hit": false
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:001",
+      "title": "How did the profitability of Microsoft's growth change across FY2023, FY2024 and FY2025? Assess consolidated operating leverage and whether the profitability of additional revenue strengthened or weakened.",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/results/turn-001-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "How did the profitability of Microsoft's growth change across FY2023, FY2024 and FY2025? Assess consolidated operating leverage and whether the profitability of additional revenue strengthened or weakened.",
+      "answer": "**Conclusion:** Microsoft's consolidated operating margin increased by 287.1 basis points from FY2023 to FY2024 and by 97.8 basis points from FY2024 to FY2025, indicating a strengthening of profitability with additional revenue.\n\n**Drivers:** The increase in operating margin suggests that Microsoft's business model has become more efficient, with a higher proportion of revenue generated from profitable operations. The growth in operating income outpaced revenue growth, indicating a strengthening of consolidated operating leverage.\n\n**Quantifications:**\n\n| Fiscal year (exact period) | Revenue (USD millions) | Operating Income (USD millions) | Operating margin |\n| --- | ---: | ---: | ---: |\n| FY2023 | 211,915.000 | 88,523.000 | 41.77% |\n| FY2024 | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 | 281,724.000 | 128,528.000 | 45.62% |\n\n**Calculations:**\n\n* FY2023 \u2192 FY2024: Incremental operating margin = 62.97% (\u0394operating income / \u0394revenue)\n* FY2024 \u2192 FY2025: Incremental operating margin = 52.17% (\u0394operating income / \u0394revenue)\n\n**Limitations:** The analysis is based on reported-period calculations and does not establish the cause or future persistence of the change. Additional factors, such as changes in revenue mix, cost structure, or market conditions, may have contributed to the observed trend.\n\n**Sources:**\n\n* `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n* `data/prices/sp100_yahoo/daily` (for historical stock prices)",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": false,
+        "metrics": {
+          "total_ms": 6660.222,
+          "route_ms": 0.009,
+          "bind_ms": 23.998,
+          "model_ms": 6549.132,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": false,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 967,
+          "completion_tokens": 386,
+          "total_tokens": 1353,
+          "ollama_total_ms": 6547.351,
+          "ollama_load_ms": 1.519,
+          "persist_ms": 10.41,
+          "source_count": 1,
+          "local_ms": 111.09
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "measured-evidence",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+        ]
+      }
+    },
+    {
+      "id": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "title": "MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "type": "finance.filing",
+      "ticker": "MSFT",
+      "tickers": [],
+      "copy_mode": "verbatim",
+      "finokf": {
+        "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "value": "245122",
+        "scale": "1000000",
+        "unit": "USD",
+        "currency": "USD",
+        "period": {
+          "start": "2023-07-01",
+          "end": "2024-06-30",
+          "kind": "duration",
+          "context_id": "C_c19fe6c0-0e87-44b0-aa2a-d9c6e40a5862",
+          "fiscal_year": 2024,
+          "fiscal_period": "FY"
+        },
+        "form": "10-K",
+        "fiscal_year": 2025
+      },
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/documents/112284a11d2a-16511187777c7194/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "source_id": "MSFT-fact-us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax__D20230701-20240630__UUSD__N4",
+      "source_path": "data/processed/filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "content_hash": "16511187777c7194b4311fefb7f074fe7b6bfacf3df824bb7c33f84fb2357d4b",
+      "first_used_at": "20260908T033405044874Z",
+      "last_used_at": "20260908T033853894055Z",
+      "use_count": 5,
+      "cache_hit": true
+    },
+    {
+      "id": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "title": "MICROSOFT CORP",
+      "type": "finance.entity",
+      "ticker": "MSFT",
+      "tickers": [],
+      "copy_mode": "verbatim",
+      "finokf": {
+        "entity": "MSFT",
+        "cik": "0000789019",
+        "sector": "Information Technology",
+        "industry": "",
+        "filing_count": 101
+      },
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/documents/9b070a2977f2-6de47b1294871389/MSFT.md",
+      "source_id": "entity:MSFT",
+      "source_path": "data/processed/companies/MSFT.md",
+      "content_hash": "6de47b1294871389737c1a1bba94dd768b64bbbfda1dc2468e545b89af627686",
+      "first_used_at": "20260908T033405044874Z",
+      "last_used_at": "20260908T033853894055Z",
+      "use_count": 5,
+      "cache_hit": true
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:2",
+      "title": "Turn 2 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/cache/turn-002-program.md",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?",
+      "cache_hit": true
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:002",
+      "title": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/results/turn-002-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?",
+      "answer": "Conclusion: Microsoft's consolidated operating leverage has been increasing across FY2023, FY2024, and FY2025, with operating margins expanding by 287.1 and 97.8 basis points, respectively.\n\nDrivers: The increase in operating leverage can be attributed to the company's ability to maintain a high operating margin despite revenue growth. The incremental operating margin, which measures the change in operating margin as a percentage of revenue, has been relatively stable at around 50-60% over the past two years.\n\nQuantitative Comparison:\n| Fiscal Year (Exact Period) | Revenue (USD millions) | Operating Income (USD millions) | Operating Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 | 211,915.000 | 88,523.000 | 41.77% |\n| FY2024 | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 | 281,724.000 | 128,528.000 | 45.62% |\n\n| Fiscal Year (Exact Period) | \u0394Revenue (USD millions) | \u0394Operating Income (USD millions) | \u0394Operating Margin (%) |\n| --- | ---: | ---: | ---: |\n| FY2023 \u2192 FY2024 | 33,207.000 | 20,910.000 | 62.97% |\n| FY2024 \u2192 FY2025 | 36,602.000 | 19,095.000 | 52.17% |\n\nThe increase in operating leverage is driven by the company's ability to maintain a high operating margin despite revenue growth. The incremental operating margin has been relatively stable, indicating that the company's operating efficiency has improved over time.\n\nLimitations: The analysis is based on reported-period calculations and does not establish the cause or future persistence of the change in operating leverage. Additionally, the data only provides a snapshot of the company's financial performance and does not account for other factors that may influence operating leverage, such as changes in business mix or operating expenses.\n\nTable:\n\n| Fiscal Year (Exact Period) | Revenue (USD millions) | Operating Income (USD millions) | Operating Margin (%) |\n| --- | ---: | ---: | ---: |\n| FY2023 | 211,915.000 | 88,523.000 | 41.77% |\n| FY2024 | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 | 281,724.000 | 128,528.000 | 45.62% |\n\nSources:\n- `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n- `data/prices/sp100_yahoo/daily`",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": true,
+        "metrics": {
+          "total_ms": 9415.869,
+          "route_ms": 0.013,
+          "bind_ms": 10.62,
+          "model_ms": 7691.146,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": true,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 972,
+          "completion_tokens": 588,
+          "total_tokens": 1560,
+          "ollama_total_ms": 7678.169,
+          "ollama_load_ms": 0.556,
+          "persist_ms": 1639.432,
+          "source_count": 1,
+          "local_ms": 1724.723
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "calculation-lru",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+        ]
+      }
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:3",
+      "title": "Turn 3 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/cache/turn-003-program.md",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "cache_hit": false
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:003",
+      "title": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/results/turn-003-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "answer": "Conclusion: Microsoft's consolidated operating leverage does not strongly support a stronger profitability outlook based on the FY2024 and FY2025 data.\n\nDrivers: The incremental operating margin of 52.17% from FY2024 to FY2025 is a significant increase, but it is largely driven by revenue growth rather than operating efficiency improvements. The operating margin increased by 97.8 basis points, which is a moderate increase.\n\nQuantifications:\n\n| Fiscal year (exact period) | Revenue (USD millions) | Operating Income (USD millions) | Operating margin |\n| --- | ---: | ---: | ---: |\n| FY2024 (2023-07-01 to 2024-06-30) | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 (2024-07-01 to 2025-06-30) | 281,724.000 | 128,528.000 | 45.62% |\n\n| \u0394 | FY2024 | FY2025 | \u0394/\u0394 |\n| --- | ---: | ---: | ---: |\n| Revenue | 36,602.000 | 281,724.000 |  |\n| Operating Income | 19,095.000 | 128,528.000 | 52.17% |\n| Operating Margin | 97.8 basis points |  |  |\n\nCalculations:\n\n- Revenue growth: 281,724.000 - 245,122.000 = 36,602.000 million\n- Operating income growth: 128,528.000 - 109,433.000 = 19,095.000 million\n- Incremental operating margin: (19,095.000 / 36,602.000) \u00d7 100 = 52.17%\n\nThe increase in operating margin is largely driven by revenue growth, which may not necessarily translate to sustained profitability improvements. The operating leverage is not strongly supported by the data, and further analysis is needed to determine the underlying drivers of the increase in operating margin.\n\nLimitation: The analysis is limited by the lack of data on operating expenses, capital expenditures, and other factors that may influence operating leverage.",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": false,
+        "metrics": {
+          "total_ms": 7020.812,
+          "route_ms": 0.013,
+          "bind_ms": 10.286,
+          "model_ms": 6916.614,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": false,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 805,
+          "completion_tokens": 454,
+          "total_tokens": 1259,
+          "ollama_total_ms": 6915.423,
+          "ollama_load_ms": 0.746,
+          "persist_ms": 13.478,
+          "source_count": 1,
+          "local_ms": 104.198
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "measured-evidence",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+        ]
+      }
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:4",
+      "title": "Turn 4 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/cache/turn-004-program.md",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?",
+      "cache_hit": true
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:004",
+      "title": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/results/turn-004-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?",
+      "answer": "**Conclusion:** Microsoft's consolidated operating margin has increased by 287.1 basis points from FY2023 to FY2024 and by 97.8 basis points from FY2024 to FY2025, indicating a sustained improvement in operating leverage. The incremental operating margin has decreased from 62.97% to 52.17% over the same period, suggesting that the company's ability to increase profitability relative to revenue is slowing down.\n\n**Drivers:** The increase in operating margin can be attributed to a combination of factors, including:\n\n* Revenue growth: Microsoft's revenue has increased by 13.5% from FY2023 to FY2024 and by 8.5% from FY2024 to FY2025, driven by the growth of its cloud computing business.\n* Cost management: Microsoft has made efforts to optimize its cost structure, including reducing its workforce and investing in automation technologies.\n* Pricing power: Microsoft has been able to maintain its pricing power in the market, particularly in the cloud computing space.\n\n**Quantitative Comparison:**\n\n| Fiscal Year (Exact Period) | Revenue (USD millions) | Operating Income (USD millions) | Operating Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 | 211,915.000 | 88,523.000 | 41.77% |\n| FY2024 | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 | 281,724.000 | 128,528.000 | 45.62% |\n\n**Table:**\n\n| Fiscal Year (Exact Period) | Revenue (USD millions) | Operating Income (USD millions) | Operating Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 | 211,915.000 | 88,523.000 | 41.77% |\n| FY2024 | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 | 281,724.000 | 128,528.000 | 45.62% |\n\n**Sources:**\n\n* `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n* `data/prices/sp100_yahoo/daily`",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": true,
+        "metrics": {
+          "total_ms": 7654.368,
+          "route_ms": 0.014,
+          "bind_ms": 10.999,
+          "model_ms": 5914.161,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": true,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 972,
+          "completion_tokens": 490,
+          "total_tokens": 1462,
+          "ollama_total_ms": 5900.953,
+          "ollama_load_ms": 0.748,
+          "persist_ms": 1648.748,
+          "source_count": 1,
+          "local_ms": 1740.207
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "calculation-lru",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+        ]
+      }
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:5",
+      "title": "Turn 5 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/cache/turn-005-program.md",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "cache_hit": true
+    },
+    {
+      "id": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:005",
+      "title": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/msft-20260908t033405042555z-3d292ecf60fc/results/turn-005-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "MSFT"
+      ],
+      "question": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?",
+      "answer": "Conclusion: Microsoft's consolidated operating leverage does not strongly support a stronger profitability outlook for FY2026 and beyond. The incremental operating margin of 52.17% is largely driven by revenue growth, and the operating margin increase of 97.8 basis points is not sufficient to establish a strong profitability outlook.\n\nDrivers: The significant revenue growth in FY2025 ($36,602 million) is the primary driver of the operating margin increase. This growth is largely due to the company's strong cloud computing business, which has been a key contributor to its revenue growth.\n\nQuantifications:\n\n| Fiscal year (exact period) | Revenue (USD millions) | Operating Income (USD millions) | Operating margin |\n| --- | ---: | ---: | ---: |\n| FY2024 (2023-07-01 to 2024-06-30) | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 (2024-07-01 to 2025-06-30) | 281,724.000 | 128,528.000 | 45.62% |\n\n| \u0394 | FY2024 | FY2025 | \u0394/\u0394 |\n| --- | ---: | ---: | ---: |\n| Revenue | 36,602.000 | 281,724.000 | 52.17% |\n| Operating Income | 19,095.000 | 128,528.000 | 672.19% |\n| Operating Margin | 97.8 basis points | 45.62% |  |\n\nCalculations:\n\n- Revenue growth: 281,724,000 - 245,122,000 = 36,602,000\n- Operating income growth: 128,528,000 - 109,433,000 = 19,095,000\n- Incremental operating margin: (19,095,000 / 36,602,000) \u00d7 100 = 52.17%\n\nLimitations: This analysis only considers the reported-period calculations and does not establish the cause or future persistence of the change. Additionally, the operating margin increase is largely driven by revenue growth, which may not be sustainable in the future.\n\nSources:\n- `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n- `data/prices/sp100_yahoo/daily`",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": true,
+        "metrics": {
+          "total_ms": 6636.203,
+          "route_ms": 0.012,
+          "bind_ms": 10.506,
+          "model_ms": 6535.674,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": true,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 805,
+          "completion_tokens": 506,
+          "total_tokens": 1311,
+          "ollama_total_ms": 6534.606,
+          "ollama_load_ms": 0.642,
+          "persist_ms": 14.466,
+          "source_count": 1,
+          "local_ms": 100.529
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "calculation-lru",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+        ]
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:1",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:1",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:001",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:1",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:1",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:2",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:002",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:2",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:2",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:3",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:3",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:003",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:3",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:3",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:4",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:4",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:004",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:4",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:4",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:5",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:5",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:005",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:5",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:msft-20260908t033405042555z-3d292ecf60fc:5",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "rel": "reuses"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:1",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:001",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:112284a11d2a",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:2",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:002",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:3",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:003",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:4",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:004",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:5",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:msft-20260908t033405042555z-3d292ecf60fc:9b070a2977f2",
+      "target": "chat:msft-20260908t033405042555z-3d292ecf60fc:answer:005",
+      "rel": "has_evidence"
+    }
+  ]
+}

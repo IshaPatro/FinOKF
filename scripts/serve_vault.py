@@ -14,6 +14,7 @@ notes and sources used for that answer.
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import ipaddress
@@ -34,7 +35,7 @@ from pathlib import Path
 from threading import Lock
 from urllib import error as urlerror
 from urllib import request as urlrequest
-from urllib.parse import unquote, urlencode, urlparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = Path(os.environ.get("FINOKF_DATA_ROOT", "data"))
@@ -2357,18 +2358,34 @@ def persist_chat_turn(
 
 
 def search_public_web(query: str) -> list[dict]:
-    """Discover public URLs; page retrieval is a separate, measured operation."""
+    """Discover public URLs with bounded fallback providers.
+
+    Yahoo is the preferred source, but its HTML search endpoint can intermittently
+    return a 500 INKApi error. A temporary discovery-provider failure should not
+    prevent the independent agent from researching public pages.
+    """
     query = query.strip()
     if len(query) > 1 and query[0] == query[-1] and query[0] in {'"', "'"}:
         query = query[1:-1].strip()
-    req = urlrequest.Request(
-        "https://search.yahoo.com/search?" + urlencode({"p": query}),
-        headers={"User-Agent": "Mozilla/5.0 (compatible; FinOKF/1.0)",
-                 "Cache-Control": "no-cache", "Pragma": "no-cache"},
-    )
-    with urlrequest.urlopen(req, timeout=25) as response:
-        raw = response.read(1_000_000).decode("utf-8", errors="replace")
-    return parse_public_search_results(raw)
+    providers = [
+        ("Yahoo", "https://search.yahoo.com/search?" + urlencode({"p": query}), parse_public_search_results),
+        ("Bing", "https://www.bing.com/search?" + urlencode({"q": query}), parse_bing_search_results),
+        ("DuckDuckGo", "https://html.duckduckgo.com/html/?" + urlencode({"q": query}), parse_duckduckgo_search_results),
+    ]
+    failures = []
+    for name, endpoint, parser in providers:
+        req = urlrequest.Request(
+            endpoint,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; FinOKF/1.0)",
+                     "Cache-Control": "no-cache", "Pragma": "no-cache"},
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=25) as response:
+                raw = response.read(1_000_000).decode("utf-8", errors="replace")
+            return parser(raw)
+        except Exception as exc:
+            failures.append(f"{name}: {exc}")
+    raise RuntimeError("All public web search providers failed: " + "; ".join(failures))
 
 
 def parse_public_search_results(raw: str) -> list[dict]:
@@ -2392,6 +2409,68 @@ def parse_public_search_results(raw: str) -> list[dict]:
         tail = raw[anchor.end():].split("</li>", 1)[0][:3000]
         paragraph = re.search(r"<p\b[^>]*>([\s\S]*?)</p>", tail, re.I)
         sources.append({"title": unescape(strip_inline_html(heading[1])), "url": url,
+                        "snippet": unescape(strip_inline_html(paragraph[1]))[:1800] if paragraph else ""})
+        if len(sources) == 6:
+            break
+    if not sources:
+        raise RuntimeError("Web search returned no usable results.")
+    return sources
+
+
+def parse_bing_search_results(raw: str) -> list[dict]:
+    """Read Bing's organic result cards without following tracking links."""
+    sources = []
+    for result in re.finditer(r'<li\b[^>]*class=["\'][^"\']*b_algo[^"\']*["\'][^>]*>([\s\S]*?)</li>', raw, re.I):
+        block = result[1]
+        heading = re.search(r'<h2\b[^>]*>\s*<a\b([^>]*)>([\s\S]*?)</a>', block, re.I)
+        if not heading:
+            continue
+        href = re.search(r'\bhref=["\']([^"\']+)', heading[1], re.I)
+        if not href:
+            continue
+        url = unescape(href[1])
+        bing_target = parse_qs(urlparse(url).query).get("u", [""])[0]
+        if bing_target.startswith("a1"):
+            try:
+                encoded = bing_target[2:]
+                encoded += "=" * (-len(encoded) % 4)
+                decoded = base64.urlsafe_b64decode(encoded).decode("utf-8")
+                if decoded.startswith(("https://", "http://")):
+                    url = decoded
+            except (ValueError, UnicodeDecodeError):
+                pass
+        if urlparse(url).scheme not in {"https", "http"}:
+            continue
+        paragraph = re.search(r'<p\b[^>]*>([\s\S]*?)</p>', block, re.I)
+        sources.append({"title": unescape(strip_inline_html(heading[2])), "url": url,
+                        "snippet": unescape(strip_inline_html(paragraph[1]))[:1800] if paragraph else ""})
+        if len(sources) == 6:
+            break
+    if not sources:
+        raise RuntimeError("Web search returned no usable results.")
+    return sources
+
+
+def parse_duckduckgo_search_results(raw: str) -> list[dict]:
+    """Read DuckDuckGo HTML results as a final no-key fallback."""
+    sources = []
+    for result in re.finditer(r'<a\b(?=[^>]*class=["\'][^"\']*result__a[^"\']*["\'])([^>]*)>([\s\S]*?)</a>', raw, re.I):
+        attrs, title_html = result[1], result[2]
+        href = re.search(r'\bhref=["\']([^"\']+)', attrs, re.I)
+        if not href:
+            continue
+        url = unescape(href[1])
+        parsed = urlparse(url)
+        if not parsed.scheme and url.startswith("//"):
+            url = "https:" + url
+            parsed = urlparse(url)
+        if parsed.path == "/l/" and parse_qs(parsed.query).get("uddg"):
+            url = unquote(parse_qs(parsed.query)["uddg"][0])
+        if urlparse(url).scheme not in {"https", "http"}:
+            continue
+        tail = raw[result.end():result.end() + 2500]
+        paragraph = re.search(r'class=["\'][^"\']*result__snippet[^"\']*["\'][^>]*>([\s\S]*?)</(?:a|div|span)>', tail, re.I)
+        sources.append({"title": unescape(strip_inline_html(title_html)), "url": url,
                         "snippet": unescape(strip_inline_html(paragraph[1]))[:1800] if paragraph else ""})
         if len(sources) == 6:
             break
@@ -2979,7 +3058,10 @@ class Handler(SimpleHTTPRequestHandler):
             "your calculations and inference. Never fabricate numbers or treat absent data as zero. "
             "Prefer dated primary evidence when sources conflict and explain material inconsistencies. "
             "Cite local paths or web URLs beside numerical claims, with a short Sources section. "
-            "Search snippets are not full pages; stored prices are not live quotes. "
+            "Stock, share, closing and adjusted-close prices MUST come only from the local CSV evidence under "
+            "data/prices/sp100_yahoo/daily; never replace those prices with web-search quotes. "
+            "Web evidence may support non-price facts such as filings, business drivers or valuation context. "
+            "Search snippets are not full pages; stored prices are dated snapshots, not live quotes. "
             "If research still leaves gaps, give the supported portion and clearly identify the remaining limitation. "
             "Keep the answer within 350 words plus a compact table and sources. Perform the numerical, sign, "
             "unit and period checks before returning your answer; do not repeat a draft or add a second report."
@@ -3146,7 +3228,7 @@ class Handler(SimpleHTTPRequestHandler):
         return {
                 "ok": True,
                 "agent": "finokf",
-                "data_access": "Local filings and prices first; web research for missing evidence",
+                "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
                 "warnings": research_warnings,
                 "sources": sources,
                 "source_files": source_files_for_run((vault.get("runs") or [{}])[-1]),

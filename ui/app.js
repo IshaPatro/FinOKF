@@ -1508,11 +1508,12 @@ class ForceGraph {
       const revealDelay = node.type === "finance.entity"
         ? 160 + centerProgress * 6200
         : 220 + centerProgress * 6500 + seed * 1300;
+      const startScale = first && largeLayout ? 0.018 : 1;
       return {
         ...node,
         deg: degree.get(node.id) || 0,
-        x: (!layoutModeChanged && prev?.x !== undefined) ? prev.x : targetX + Math.cos(index * 1.618) * (first && largeLayout ? 2.5 : 0),
-        y: (!layoutModeChanged && prev?.y !== undefined) ? prev.y : targetY + Math.sin(index * 1.618) * (first && largeLayout ? 2.5 : 0),
+        x: (!layoutModeChanged && prev?.x !== undefined) ? prev.x : targetX * startScale + Math.cos(index * 1.618) * (first && largeLayout ? 2.5 : 0),
+        y: (!layoutModeChanged && prev?.y !== undefined) ? prev.y : targetY * startScale + Math.sin(index * 1.618) * (first && largeLayout ? 2.5 : 0),
         layoutDx: (!layoutModeChanged && prev?.layoutDx !== undefined) ? prev.layoutDx : layoutDx,
         layoutDy: (!layoutModeChanged && prev?.layoutDy !== undefined) ? prev.layoutDy : layoutDy,
         revealDelay: prev?.revealDelay ?? (first && largeLayout ? revealDelay : 0),
@@ -1586,11 +1587,6 @@ class ForceGraph {
     return 1 - Math.pow(1 - value, 3);
   }
 
-  stockRevealScale(progress) {
-    if (progress >= 1) return 1;
-    return Math.max(0, this.easeOut(progress) + Math.sin(progress * Math.PI) * 0.1);
-  }
-
   /* ---- simulation ---- */
   step() {
     const nodes = this.nodes;
@@ -1656,13 +1652,14 @@ class ForceGraph {
       if (cluster && this.largeLayout) {
         let targetX = cluster.x;
         let targetY = cluster.y;
+        const progress = this.easeOut(this.revealProgress(node, now));
         if (node.type === "finance.entity") {
-          targetX = cluster.x;
-          targetY = cluster.y;
+          targetX = cluster.x * progress;
+          targetY = cluster.y * progress;
         } else {
           const hub = this.companyNodes.get(String(node.ticker || "UNKNOWN"));
-          targetX = (hub?.x ?? cluster.x) + node.layoutDx;
-          targetY = (hub?.y ?? cluster.y) + node.layoutDy;
+          targetX = (hub?.x ?? cluster.x) + node.layoutDx * progress;
+          targetY = (hub?.y ?? cluster.y) + node.layoutDy * progress;
         }
         const spring = 0.026 + this.CLUSTER_GRAVITY * Math.max(0.22, alpha);
         node.vx += (targetX - node.x) * spring;
@@ -1896,8 +1893,7 @@ class ForceGraph {
     for (const node of this.nodes) {
       const reveal = this.revealProgress(node, now);
       if (reveal <= 0.01) continue;
-      const revealScale = node.type === "finance.entity" ? this.stockRevealScale(reveal) : 1;
-      const r = Math.max(this.radius(node) * revealScale, (node.type === "finance.entity" ? 2.8 : 0.65) / t.k);
+      const r = Math.max(this.radius(node), (node.type === "finance.entity" ? 2.8 : 0.65) / t.k);
       const selected = node.id === this.selectedId;
       const hovered = node.id === this.hoverId;
       const dim = active && !active.has(node.id);
