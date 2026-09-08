@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "agent": "finokf",
+  "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+  "warnings": [],
+  "sources": [
+    "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+    "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+  ],
+  "source_files": [
+    {
+      "title": "MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/112284a11d2a-16511187777c7194/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "source_path": "data/processed/filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+    },
+    {
+      "title": "AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/d5885b6b79d5-02c67f11f7227ced/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "source_path": "data/processed/filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+    }
+  ],
+  "model": "llama3.2:3b",
+  "provider": "ollama",
+  "answer": "**Conclusion:** MSFT's consolidated operating leverage increased by 97.8 basis points between FY2024 and FY2025, while AAPL's operating leverage increased by 46.1 basis points during the same period.\n\n**Drivers:** The increase in operating leverage for both companies can be attributed to their ability to maintain or increase profitability despite revenue growth. MSFT's operating margin expanded from 44.64% to 45.62%, while AAPL's operating margin increased from 31.51% to 31.97%. These improvements in profitability can be attributed to various factors, including cost management, pricing strategies, and operational efficiencies.\n\n**Quantitative Comparison:**\n\n| Company | FY2024 | FY2025 | \u0394Revenue | \u0394Operating Income | \u0394Operating Margin |\n| --- | ---: | ---: | ---: | ---: | ---: |\n| MSFT | 44.64% | 45.62% | +97.8 basis points |\n| AAPL | 31.51% | 31.97% | +46.1 basis points |\n\n**Calculations:**\n\n* \u0394Revenue = Revenue FY2025 - Revenue FY2024\n* \u0394Operating Income = Operating Income FY2025 - Operating Income FY2024\n* \u0394Operating Margin = (Operating Income FY2025 - Operating Income FY2024) / (Revenue FY2025 - Revenue FY2024) \u00d7 100\n\n**Limitations:** This analysis is based on reported-period calculations and does not establish the cause or future persistence of the changes in operating leverage. Additional factors, such as changes in cost structures, pricing strategies, and market conditions, may have contributed to these changes.\n\n**Sources:**\n\n* MSFT: `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n* AAPL: `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`",
+  "method": "auto",
+  "route": "ollama-measured-synthesis",
+  "cache_hit": false,
+  "cache_kind": "measured-evidence",
+  "metrics": {
+    "total_ms": 7819.216,
+    "route_ms": 0.016,
+    "bind_ms": 18.518,
+    "model_ms": 7679.962,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "llm_cache_hit": false,
+    "evidence_cache_hit": false,
+    "web_requests": 0,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "prompt_tokens": 1212,
+    "completion_tokens": 427,
+    "total_tokens": 1639,
+    "ollama_total_ms": 7678.969,
+    "ollama_load_ms": 0.88,
+    "request_ids": [],
+    "persist_ms": 20.663,
+    "source_count": 2,
+    "local_ms": 139.254
+  }
+}

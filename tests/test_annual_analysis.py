@@ -49,6 +49,33 @@ class AnnualAnalysisTests(unittest.TestCase):
         self.assertFalse(updated["lru_hit"])
         self.assertIn("50.00%", updated["answer"])
 
+    def test_multi_company_compiler_scales_beyond_two_tickers(self):
+        facts_by_ticker = {
+            ticker: [fact(role, concept, year, value, scale)
+                     for role, concept, year, value, scale in self._company_facts()]
+            for ticker in ["MSFT", "AAPL", "GOOG"]
+        }
+        with mock.patch.object(server, "load_flashokf_facts",
+                               side_effect=lambda ticker: {"facts": facts_by_ticker[ticker]}):
+            result = server.compile_multi_company_annual_analysis(
+                "Compare MSFT, AAPL and GOOG operating leverage for FY2024 and FY2025.",
+                ["MSFT", "AAPL", "GOOG"],
+            )
+        self.assertTrue(result["hit"])
+        self.assertEqual(result["program"]["companies"], ["MSFT", "AAPL", "GOOG"])
+        self.assertEqual(len(result["bindings"]), 12)
+        for ticker in ["MSFT", "AAPL", "GOOG"]:
+            self.assertIn(f"## {ticker}", result["answer"])
+
+    @staticmethod
+    def _company_facts():
+        return [
+            ("revenue", "Revenues", 2024, "100", "1000000"),
+            ("operating_income", "OperatingIncomeLoss", 2024, "10000000", "1"),
+            ("revenue", "Revenues", 2025, "120", "1000000"),
+            ("operating_income", "OperatingIncomeLoss", 2025, "18", "1000000"),
+        ]
+
     def test_historical_answer_source_section_collapses_duplicate_filing_paths(self):
         answer = "Conclusion.\n\nSources:\n- FY2024 revenue: `filings/TEST/annual.md`.\n- FY2024 cost: `filings/TEST/annual.md`.\n- `filings/TEST/other.md`\n"
         repaired = server.compact_answer_sources(answer)

@@ -1,0 +1,52 @@
+{
+  "source": "QUESTIONS.md",
+  "questions": [
+    {
+      "id": "question-01",
+      "title": "Microsoft - how efficiently growth becomes operating profit",
+      "subquestions": [
+        {
+          "id": "question-01-01",
+          "label": "Initial question",
+          "prompt": "How did the profitability of Microsoft's growth change across FY2023, FY2024 and FY2025? Assess consolidated operating leverage and whether the profitability of additional revenue strengthened or weakened."
+        },
+        {
+          "id": "question-01-02",
+          "label": "Follow-up using the same measurements",
+          "prompt": "What should a portfolio manager take away from Microsoft's consolidated operating leverage across FY2023, FY2024 and FY2025? Was operating profit outpacing revenue, and was that advantage accelerating or fading?"
+        },
+        {
+          "id": "question-01-03",
+          "label": "Changed-period follow-up",
+          "prompt": "Looking only at FY2024 and FY2025, does Microsoft's consolidated operating leverage support a stronger profitability outlook, or would that conclusion overstate what the results show?"
+        }
+      ]
+    },
+    {
+      "id": "question-02",
+      "title": "Apple - the economic significance of gross-margin expansion",
+      "subquestions": [
+        {
+          "id": "question-02-01",
+          "label": "Initial question",
+          "prompt": "How meaningful was the change in Apple's consolidated gross margin across FY2023, FY2024 and FY2025? Was Apple retaining more of each revenue dollar after direct costs, and was the pace of improvement strengthening or weakening?"
+        },
+        {
+          "id": "question-02-02",
+          "label": "Follow-up using the same measurements",
+          "prompt": "How would you characterize Apple's consolidated gross margin performance in FY2023, FY2024 and FY2025: steady progress or an uneven improvement? Explain its significance for an analyst and the limits of extrapolating the trend."
+        },
+        {
+          "id": "question-02-03",
+          "label": "Changed-period follow-up",
+          "prompt": "Did Apple's consolidated gross margin change between FY2024 and FY2025 materially improve the economics of each revenue dollar? What does that comparison tell an investor, and what does it leave unresolved?"
+        },
+        {
+          "id": "question-02-04",
+          "label": "Company comparison follow-up",
+          "prompt": "How did MSFT's consolidated operating leverage change between FY2024 and FY2025 as compared to Apple?"
+        }
+      ]
+    }
+  ]
+}

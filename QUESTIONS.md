@@ -32,6 +32,10 @@ Changed-period follow-up:
 
 > Did Apple's consolidated gross margin change between FY2024 and FY2025 materially improve the economics of each revenue dollar? What does that comparison tell an investor, and what does it leave unresolved?
 
+Company comparison follow-up:
+
+> How did MSFT's consolidated operating leverage change between FY2024 and FY2025 as compared to Apple?
+
 ## 3. Amazon — whether cash is keeping pace with earnings
 
 Initial question:

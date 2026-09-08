@@ -1154,6 +1154,7 @@ function addComparison(answers) {
     ["Input tokens", (r) => number(r.metrics?.prompt_tokens)],
     ["Output tokens", (r) => number(r.metrics?.completion_tokens)],
     ["Total tokens", (r) => number(r.metrics?.total_tokens)],
+    ["Request IDs", (r) => (r.metrics?.request_ids || []).join(", ") || "Not recorded"],
     ["Web searches", (r) => number(r.metrics?.web_requests)],
     ["Web page requests", (r) => number(r.metrics?.page_requests)],
     ["Web pages read", (r) => number(r.metrics?.pages_fetched)],

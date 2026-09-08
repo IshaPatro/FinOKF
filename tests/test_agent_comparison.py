@@ -294,6 +294,23 @@ class ComparisonTests(unittest.TestCase):
             self.assertIn(source["url"], snapshot)
             self.assertIn(source["text"], snapshot)
 
+    def test_precreated_chat_vault_keeps_automation_title(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(server, "ROOT", Path(directory)), \
+             mock.patch.object(server, "VAULTS", Path(directory) / "vaults"):
+            created = server.create_chat_vault({"ticker": "MSFT"}, "question-01-gpt-5.5")
+            saved = server.persist_chat_turn(
+                created["vault_id"],
+                "How did Microsoft profitability change?",
+                "Answer",
+                {"ticker": "MSFT"},
+                [],
+                {"chain": []},
+                {"route": "test", "metrics": {}},
+            )
+
+        self.assertEqual(saved["title"], "question-01-gpt-5.5")
+
     def test_analytical_cash_question_does_not_short_circuit_to_cash_balance(self):
         question = "Is Amazon's improvement in profitability translating into high-quality cash generation, or is the cash story weaker than the income statement suggests?"
         with mock.patch.object(server, "load_flashokf_facts", side_effect=AssertionError("scalar lookup attempted")):

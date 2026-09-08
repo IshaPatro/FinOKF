@@ -1,0 +1,507 @@
+{
+  "scope": "vault",
+  "turn": 4,
+  "nodes": [
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8",
+      "title": "How did MSFT's consolidated operating leverage change between FY2024 and FY2025 as compared to Apple?",
+      "type": "finokf.chat_vault",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/turns/turn-004.md"
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:1",
+      "title": "Turn 1 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/cache/turn-001-program.md",
+      "tickers": [
+        "AAPL"
+      ],
+      "question": "How meaningful was the change in Apple's consolidated gross margin across FY2023, FY2024 and FY2025? Was Apple retaining more of each revenue dollar after direct costs, and was the pace of improvement strengthening or weakening?",
+      "cache_hit": false
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:001",
+      "title": "How meaningful was the change in Apple's consolidated gross margin across FY2023, FY2024 and FY2025? Was Apple retaining more of each revenue dollar after direct costs, and was the pace of improvement strengthening or weakening?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/results/turn-001-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "AAPL"
+      ],
+      "question": "How meaningful was the change in Apple's consolidated gross margin across FY2023, FY2024 and FY2025? Was Apple retaining more of each revenue dollar after direct costs, and was the pace of improvement strengthening or weakening?",
+      "answer": "Conclusion: Apple's consolidated gross margin increased by 207.5 basis points from FY2023 to FY2024 and by 69.9 basis points from FY2024 to FY2025. The pace of improvement in gross margin appears to be strengthening.\n\nDrivers: The increase in gross margin from FY2023 to FY2024 can be attributed to a 6.8% decrease in cost of revenue, while revenue increased by 2.2%. The further improvement from FY2024 to FY2025 may be driven by increased pricing power, operational efficiencies, or a combination of both.\n\nQuantifications:\n\n| Fiscal year (exact period) | Revenue (USD millions) | Cost of Revenue (USD millions) | Gross Margin Change (basis points) |\n| --- | ---: | ---: | ---: |\n| FY2023 to FY2024 | 2.2% | -6.8% | +207.5 basis points |\n| FY2024 to FY2025 | 6.5% | -5.4% | +69.9 basis points |\n\nCalculations:\n\n- FY2023 to FY2024: ((383,285 - 214,137) / 383,285) \u00d7 100 = 44.13% \u2192 ((391,035 - 210,352) / 391,035) \u00d7 100 = 46.21% \u2192 +207.5 basis points\n- FY2024 to FY2025: ((391,035 - 210,352) / 391,035) \u00d7 100 = 46.21% \u2192 ((416,161 - 220,960) / 416,161) \u00d7 100 = 46.91% \u2192 +69.9 basis points\n\nTable:\n\n| Fiscal year (exact period) | Revenue (USD millions) | Cost of Revenue (USD millions) | Gross Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 (2022-09-25 to 2023-09-30) | 383,285.000 | 214,137.000 | 44.13% |\n| FY2024 (2023-10-01 to 2024-09-28) | 391,035.000 | 210,352.000 | 46.21% |\n| FY2025 (2024-09-29 to 2025-09-27) | 416,161.000 | 220,960.000 | 46.91% |\n\nSources:\n- `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`\n- `data/prices/sp100_yahoo/daily`",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": false,
+        "metrics": {
+          "total_ms": 8930.113,
+          "route_ms": 0.016,
+          "bind_ms": 28.32,
+          "model_ms": 8766.355,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": false,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 898,
+          "completion_tokens": 573,
+          "total_tokens": 1471,
+          "ollama_total_ms": 8765.325,
+          "ollama_load_ms": 0.926,
+          "request_ids": [],
+          "persist_ms": 13.71,
+          "source_count": 1,
+          "local_ms": 163.758
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "measured-evidence",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+        ]
+      }
+    },
+    {
+      "id": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:d5885b6b79d5",
+      "title": "AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "type": "finance.filing",
+      "ticker": "AAPL",
+      "tickers": [],
+      "copy_mode": "verbatim",
+      "finokf": {
+        "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "value": "391035",
+        "scale": "1000000",
+        "unit": "USD",
+        "currency": "USD",
+        "period": {
+          "start": "2023-10-01",
+          "end": "2024-09-28",
+          "kind": "duration",
+          "context_id": "c-18",
+          "fiscal_year": 2024,
+          "fiscal_period": "FY"
+        },
+        "form": "10-K",
+        "fiscal_year": 2025
+      },
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/d5885b6b79d5-02c67f11f7227ced/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "source_id": "AAPL-fact-us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax__D20231001-20240928__UUSD__N4",
+      "source_path": "data/processed/filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "content_hash": "02c67f11f7227ced4ddff5aef7ea01759238a5288bb7843b342062172381bcca",
+      "first_used_at": "20260908T210519777001Z",
+      "last_used_at": "20260908T210751821228Z",
+      "use_count": 4,
+      "cache_hit": false
+    },
+    {
+      "id": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "title": "Apple Inc.",
+      "type": "finance.entity",
+      "ticker": "AAPL",
+      "tickers": [],
+      "copy_mode": "verbatim",
+      "finokf": {
+        "entity": "AAPL",
+        "cik": "0000320193",
+        "sector": "Information Technology",
+        "industry": "",
+        "filing_count": 90
+      },
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/33c94357d64b-ebe8622644861407/AAPL.md",
+      "source_id": "entity:AAPL",
+      "source_path": "data/processed/companies/AAPL.md",
+      "content_hash": "ebe86226448614078676a15d62c654efa05126c153955b37bed92876a795e36f",
+      "first_used_at": "20260908T210519777001Z",
+      "last_used_at": "20260908T210751821228Z",
+      "use_count": 4,
+      "cache_hit": false
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:2",
+      "title": "Turn 2 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/cache/turn-002-program.md",
+      "tickers": [
+        "AAPL"
+      ],
+      "question": "How would you characterize Apple's consolidated gross margin performance in FY2023, FY2024 and FY2025: steady progress or an uneven improvement? Explain its significance for an analyst and the limits of extrapolating the trend.",
+      "cache_hit": true
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:002",
+      "title": "How would you characterize Apple's consolidated gross margin performance in FY2023, FY2024 and FY2025: steady progress or an uneven improvement? Explain its significance for an analyst and the limits of extrapolating the trend.",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/results/turn-002-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "AAPL"
+      ],
+      "question": "How would you characterize Apple's consolidated gross margin performance in FY2023, FY2024 and FY2025: steady progress or an uneven improvement? Explain its significance for an analyst and the limits of extrapolating the trend.",
+      "answer": "**Conclusion:** Apple's consolidated gross margin has shown uneven improvement from FY2023 to FY2024 and FY2024 to FY2025, with a +207.5 basis point increase in FY2023 and a +69.9 basis point increase in FY2024.\n\n**Drivers:** The improvement in gross margin is likely driven by Apple's focus on product mix, pricing strategies, and operational efficiencies. The increase in gross margin in FY2023 may be attributed to the impact of the iPhone 14 series, which was launched in the latter part of the fiscal year. The subsequent increase in FY2024 and FY2025 may be due to the continued success of the iPhone 14 series and the introduction of new products, such as the iPhone 15 series.\n\n**Quantifications:**\n\n| Fiscal Year (Exact Period) | Gross Margin Change (basis points) |\n| --- | ---: |\n| FY2023 \u2192 FY2024 | +207.5 |\n| FY2024 \u2192 FY2025 | +69.9 |\n\n**Limitations:** The analysis is limited by the availability of data and the potential for one-time or seasonal factors to impact the gross margin. Additionally, the gross margin calculation does not account for other factors that may influence the company's profitability, such as operating expenses, taxes, and interest income.\n\n**Table:**\n\n| Fiscal Year (Exact Period) | Revenue (USD millions) | Cost Of Revenue (USD millions) | Gross Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 (2022-09-25 to 2023-09-30) | 383,285.000 | 214,137.000 | 44.13% |\n| FY2024 (2023-10-01 to 2024-09-28) | 391,035.000 | 210,352.000 | 46.21% |\n| FY2025 (2024-09-29 to 2025-09-27) | 416,161.000 | 220,960.000 | 46.91% |\n\n**Sources:**\n\n* `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`\n* `data/prices/sp100_yahoo/daily`",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": true,
+        "metrics": {
+          "total_ms": 9928.728,
+          "route_ms": 0.006,
+          "bind_ms": 14.875,
+          "model_ms": 9807.107,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": true,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 897,
+          "completion_tokens": 486,
+          "total_tokens": 1383,
+          "ollama_total_ms": 9806.084,
+          "ollama_load_ms": 0.778,
+          "request_ids": [],
+          "persist_ms": 14.937,
+          "source_count": 1,
+          "local_ms": 121.621
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "calculation-lru",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+        ]
+      }
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:3",
+      "title": "Turn 3 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/cache/turn-003-program.md",
+      "tickers": [
+        "AAPL"
+      ],
+      "question": "Did Apple's consolidated gross margin change between FY2024 and FY2025 materially improve the economics of each revenue dollar? What does that comparison tell an investor, and what does it leave unresolved?",
+      "cache_hit": false
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:003",
+      "title": "Did Apple's consolidated gross margin change between FY2024 and FY2025 materially improve the economics of each revenue dollar? What does that comparison tell an investor, and what does it leave unresolved?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/results/turn-003-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "AAPL"
+      ],
+      "question": "Did Apple's consolidated gross margin change between FY2024 and FY2025 materially improve the economics of each revenue dollar? What does that comparison tell an investor, and what does it leave unresolved?",
+      "answer": "Conclusion: Apple's consolidated gross margin increased by 69.9 basis points between FY2024 and FY2025, indicating a material improvement in the economics of each revenue dollar.\n\nDrivers: The increase in gross margin can be attributed to various factors, including cost management, pricing power, and operational efficiency improvements.\n\nQuantitative Comparison: The gross margin ratio for FY2025 (46.91%) is higher than that of FY2024 (46.21%). This represents a 0.70 percentage point increase, which is a 1.51% increase in the gross margin ratio.\n\nCalculation: The gross margin ratio for FY2024 is (391,035 - 210,352) / 391,035 \u00d7 100 = 46.21%, while for FY2025 it is (416,161 - 220,960) / 416,161 \u00d7 100 = 46.91%.\n\nImplication: This improvement in gross margin ratio suggests that Apple's ability to generate revenue per dollar sold has increased, which can be beneficial for investors as it indicates a more efficient use of resources and potentially higher profitability.\n\nUnresolved: The cause of the increase in gross margin is not explicitly stated, and it is unclear whether this improvement is sustainable or if it is a one-time event. Additionally, the gross margin ratio does not provide information on the company's cash conversion cycle, working capital, or capital expenditures, which are also important metrics for evaluating a company's financial health.",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": false,
+        "metrics": {
+          "total_ms": 5961.116,
+          "route_ms": 0.018,
+          "bind_ms": 21.563,
+          "model_ms": 5820.38,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": false,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 776,
+          "completion_tokens": 301,
+          "total_tokens": 1077,
+          "ollama_total_ms": 5819.192,
+          "ollama_load_ms": 1.078,
+          "request_ids": [],
+          "persist_ms": 13.331,
+          "source_count": 1,
+          "local_ms": 140.736
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "measured-evidence",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+        ]
+      }
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "title": "Turn 4 \u00b7 ollama-measured-synthesis",
+      "type": "finokf.cache_run",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/cache/turn-004-program.md",
+      "tickers": [
+        "MSFT",
+        "AAPL"
+      ],
+      "question": "How did MSFT's consolidated operating leverage change between FY2024 and FY2025 as compared to Apple?",
+      "cache_hit": false
+    },
+    {
+      "id": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:004",
+      "title": "How did MSFT's consolidated operating leverage change between FY2024 and FY2025 as compared to Apple?",
+      "type": "certifacts.answer",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/results/turn-004-finokf.md",
+      "agent": "finokf",
+      "tickers": [
+        "MSFT",
+        "AAPL"
+      ],
+      "question": "How did MSFT's consolidated operating leverage change between FY2024 and FY2025 as compared to Apple?",
+      "answer": "**Conclusion:** MSFT's consolidated operating leverage increased by 97.8 basis points between FY2024 and FY2025, while AAPL's operating leverage increased by 46.1 basis points during the same period.\n\n**Drivers:** The increase in operating leverage for both companies can be attributed to their ability to maintain or increase profitability despite revenue growth. MSFT's operating margin expanded from 44.64% to 45.62%, while AAPL's operating margin increased from 31.51% to 31.97%. These improvements in profitability can be attributed to various factors, including cost management, pricing strategies, and operational efficiencies.\n\n**Quantitative Comparison:**\n\n| Company | FY2024 | FY2025 | \u0394Revenue | \u0394Operating Income | \u0394Operating Margin |\n| --- | ---: | ---: | ---: | ---: | ---: |\n| MSFT | 44.64% | 45.62% | +97.8 basis points |\n| AAPL | 31.51% | 31.97% | +46.1 basis points |\n\n**Calculations:**\n\n* \u0394Revenue = Revenue FY2025 - Revenue FY2024\n* \u0394Operating Income = Operating Income FY2025 - Operating Income FY2024\n* \u0394Operating Margin = (Operating Income FY2025 - Operating Income FY2024) / (Revenue FY2025 - Revenue FY2024) \u00d7 100\n\n**Limitations:** This analysis is based on reported-period calculations and does not establish the cause or future persistence of the changes in operating leverage. Additional factors, such as changes in cost structures, pricing strategies, and market conditions, may have contributed to these changes.\n\n**Sources:**\n\n* MSFT: `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n* AAPL: `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`",
+      "metadata": {
+        "route": "ollama-measured-synthesis",
+        "cache_hit": false,
+        "metrics": {
+          "total_ms": 7819.216,
+          "route_ms": 0.016,
+          "bind_ms": 18.518,
+          "model_ms": 7679.962,
+          "model_calls": 1,
+          "model_attempts": 1,
+          "usage_complete": true,
+          "llm_cache_hit": false,
+          "evidence_cache_hit": false,
+          "web_requests": 0,
+          "page_requests": 0,
+          "pages_fetched": 0,
+          "prompt_tokens": 1212,
+          "completion_tokens": 427,
+          "total_tokens": 1639,
+          "ollama_total_ms": 7678.969,
+          "ollama_load_ms": 0.88,
+          "request_ids": [],
+          "persist_ms": 20.663,
+          "source_count": 2,
+          "local_ms": 139.254
+        },
+        "provider": "ollama",
+        "model": "llama3.2:3b",
+        "cache_kind": "measured-evidence",
+        "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+        "sources": [
+          "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+          "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+        ]
+      }
+    },
+    {
+      "id": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:112284a11d2a",
+      "title": "MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "type": "finance.filing",
+      "ticker": "MSFT",
+      "tickers": [],
+      "copy_mode": "verbatim",
+      "finokf": {
+        "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+        "value": "245122",
+        "scale": "1000000",
+        "unit": "USD",
+        "currency": "USD",
+        "period": {
+          "start": "2023-07-01",
+          "end": "2024-06-30",
+          "kind": "duration",
+          "context_id": "C_c19fe6c0-0e87-44b0-aa2a-d9c6e40a5862",
+          "fiscal_year": 2024,
+          "fiscal_period": "FY"
+        },
+        "form": "10-K",
+        "fiscal_year": 2025
+      },
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/112284a11d2a-16511187777c7194/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "source_id": "MSFT-fact-us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax__D20230701-20240630__UUSD__N4",
+      "source_path": "data/processed/filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "content_hash": "16511187777c7194b4311fefb7f074fe7b6bfacf3df824bb7c33f84fb2357d4b",
+      "first_used_at": "20260908T210751821228Z",
+      "last_used_at": "20260908T210751821228Z",
+      "use_count": 1,
+      "cache_hit": false
+    },
+    {
+      "id": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:9b070a2977f2",
+      "title": "MICROSOFT CORP",
+      "type": "finance.entity",
+      "ticker": "MSFT",
+      "tickers": [],
+      "copy_mode": "verbatim",
+      "finokf": {
+        "entity": "MSFT",
+        "cik": "0000789019",
+        "sector": "Information Technology",
+        "industry": "",
+        "filing_count": 101
+      },
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/9b070a2977f2-6de47b1294871389/MSFT.md",
+      "source_id": "entity:MSFT",
+      "source_path": "data/processed/companies/MSFT.md",
+      "content_hash": "6de47b1294871389737c1a1bba94dd768b64bbbfda1dc2468e545b89af627686",
+      "first_used_at": "20260908T210751821228Z",
+      "last_used_at": "20260908T210751821228Z",
+      "use_count": 1,
+      "cache_hit": false
+    }
+  ],
+  "links": [
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:1",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:1",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:001",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:1",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:d5885b6b79d5",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:1",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:2",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:2",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:002",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:2",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:d5885b6b79d5",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:2",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "rel": "reuses"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:3",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:3",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:003",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:3",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:d5885b6b79d5",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:3",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "rel": "executes"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:004",
+      "rel": "produces"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:112284a11d2a",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:d5885b6b79d5",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "rel": "binds"
+    },
+    {
+      "source": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:9b070a2977f2",
+      "rel": "binds"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:1",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:001",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:d5885b6b79d5",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:2",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:002",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:3",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:003",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:9b070a2977f2",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:4",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:9b070a2977f2",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:004",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:33c94357d64b",
+      "target": "chat:aapl-20260908t210510856010z-7a6e05bed7e8:answer:004",
+      "rel": "has_evidence"
+    },
+    {
+      "source": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:9b070a2977f2",
+      "target": "snapshot:chat:aapl-20260908t210510856010z-7a6e05bed7e8:112284a11d2a",
+      "rel": "has_evidence"
+    }
+  ]
+}

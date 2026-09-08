@@ -51,7 +51,7 @@ LLM_PROVIDER = "ollama"
 LLM_PROVIDER_CHOICES = {"ollama", "openai", "anthropic"}
 LLM_DEFAULT_MODELS = {
     "ollama": "llama3.2:3b",
-    "openai": "gpt-5-mini",
+    "openai": "gpt-5.5",
     "anthropic": "claude-sonnet-5",
 }
 FLASH_INDEX_CACHE: dict[str, tuple[int, dict]] = {}
@@ -1127,6 +1127,46 @@ def compile_flashokf(question: str, ticker: str) -> dict:
     }
 
 
+def compile_multi_company_annual_analysis(question: str, tickers: list[str]) -> dict:
+    """Compile the same validated annual analysis independently for every ticker."""
+    ordered_tickers = list(dict.fromkeys(str(ticker).upper() for ticker in tickers if ticker))
+    if len(ordered_tickers) < 2:
+        return {"hit": False, "reason": "At least two companies are required for a comparison."}
+
+    results = []
+    for ticker in ordered_tickers:
+        result = compile_annual_analysis(question, ticker)
+        if result is None:
+            return {"hit": False, "reason": f"The annual compiler does not support this comparison for {ticker}."}
+        if not result.get("hit"):
+            return {"hit": False, "reason": f"{ticker}: {result.get('reason', 'validated annual facts are unavailable')}"}
+        results.append(result)
+
+    sections = [
+        "Validated local annual measurements for every company named in the question.",
+        "Each company below was compiled independently from consolidated FY facts; compare only matching periods and units.",
+        "",
+    ]
+    for ticker, result in zip(ordered_tickers, results):
+        sections.extend([f"## {ticker}", result["answer"], ""])
+
+    bindings = [fact for result in results for fact in result.get("bindings", [])]
+    evidence_nodes = [node for result in results for node in result.get("evidence_nodes", [])]
+    return {
+        "hit": True,
+        "lru_hit": all(result.get("lru_hit", False) for result in results),
+        "route": "compiled-program",
+        "answer": "\n".join(sections).rstrip(),
+        "program": {
+            "operation": "multi_company_annual_comparison",
+            "companies": ordered_tickers,
+            "subprograms": [result.get("program") for result in results],
+        },
+        "bindings": bindings,
+        "evidence_nodes": evidence_nodes,
+    }
+
+
 def token_usage(input_tokens, output_tokens, total_tokens=None) -> dict:
     """Missing provider usage is unknown, never a zero-token inference."""
     valid = lambda value: value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
@@ -1138,9 +1178,10 @@ def token_usage(input_tokens, output_tokens, total_tokens=None) -> dict:
 
 
 def sum_usage(left: dict, right: dict) -> dict:
-    combined = {key: None if left.get(key, 0) is None or right.get(key, 0) is None
-                else left.get(key, 0) + right.get(key, 0)
-                for key in (set(left) | set(right)) - {"usage_complete"}}
+    combined = {}
+    for key in (set(left) | set(right)) - {"usage_complete", "request_ids"}:
+        combined[key] = None if left.get(key, 0) is None or right.get(key, 0) is None else left.get(key, 0) + right.get(key, 0)
+    combined["request_ids"] = list(left.get("request_ids") or []) + list(right.get("request_ids") or [])
     combined["usage_complete"] = (left.get("usage_complete", True) and right.get("usage_complete", True)
                                   and all(combined.get(k) is not None for k in ("prompt_tokens", "completion_tokens", "total_tokens")))
     return combined
@@ -1171,6 +1212,7 @@ def call_ollama(system_prompt: str, user_prompt: str, config: dict[str, str] | N
     try:
         with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
             result = json.loads(response.read() or b"{}")
+            request_id = getattr(response, "headers", {}).get("x-request-id") or result.get("id")
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:800]
         if exc.code == 404:
@@ -1185,6 +1227,7 @@ def call_ollama(system_prompt: str, user_prompt: str, config: dict[str, str] | N
         **token_usage(result.get("prompt_eval_count"), result.get("eval_count")),
         "ollama_total_ms": round(int(result.get("total_duration") or 0) / 1_000_000, 3),
         "ollama_load_ms": round(int(result.get("load_duration") or 0) / 1_000_000, 3),
+        "request_ids": [request_id] if request_id else [],
     }
     return answer, usage, model_ms
 
@@ -1211,6 +1254,7 @@ def call_openai(system_prompt: str, user_prompt: str, config: dict[str, str] | N
     try:
         with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
             result = json.loads(response.read() or b"{}")
+            request_id = getattr(response, "headers", {}).get("x-request-id") or result.get("id")
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:800]
         raise RuntimeError(f"OpenAI API request failed ({exc.code}): {detail}") from exc
@@ -1228,6 +1272,7 @@ def call_openai(system_prompt: str, user_prompt: str, config: dict[str, str] | N
         **token_usage(api_usage.get("input_tokens"), api_usage.get("output_tokens"), api_usage.get("total_tokens")),
         "ollama_total_ms": 0,
         "ollama_load_ms": 0,
+        "request_ids": [request_id] if request_id else [],
     }
     return answer, usage, model_ms
 
@@ -1258,6 +1303,7 @@ def call_anthropic(system_prompt: str, user_prompt: str, config: dict[str, str] 
     try:
         with urlrequest.urlopen(req, timeout=LLM_TIMEOUT) as response:
             result = json.loads(response.read() or b"{}")
+            request_id = getattr(response, "headers", {}).get("x-request-id") or result.get("id")
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:800]
         raise RuntimeError(f"Anthropic API request failed ({exc.code}): {detail}") from exc
@@ -1275,6 +1321,7 @@ def call_anthropic(system_prompt: str, user_prompt: str, config: dict[str, str] 
         **token_usage(input_tokens, output_tokens),
         "ollama_total_ms": 0,
         "ollama_load_ms": 0,
+        "request_ids": [request_id] if request_id else [],
     }
     return answer, usage, model_ms
 
@@ -2164,7 +2211,7 @@ def persist_chat_turn(
     turn_number = len(index.get("runs") or []) + 1
     turn_id = f"turn-{turn_number:03d}"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    if not index.get("messages"):
+    if not index.get("messages") and index.get("title") in {None, "", "New chat"}:
         index["title"] = question[:72] or index.get("title", "New chat")
         index["ticker"] = selected.get("ticker", "")
 
@@ -3021,8 +3068,13 @@ class Handler(SimpleHTTPRequestHandler):
             selected = next((item for item in candidates if item.get("type") == "finance.entity"),
                             next((item for item in candidates if item.get("type") == "finance.filing"), selected))
         market_question = is_price_growth_question(message) or any(word in message.lower() for word in ("price", "worth", "market cap", "valuation", "buy"))
-        allow_compiled = len(mentioned_tickers) <= 1 and not market_question
-        compiled = compile_flashokf(message, next(iter(mentioned_tickers), str(selected.get("ticker") or ""))) if allow_compiled else {"hit": False}
+        allow_compiled = not market_question
+        if allow_compiled and len(mentioned_tickers) > 1:
+            compiled = compile_multi_company_annual_analysis(message, mentioned_tickers)
+        elif allow_compiled:
+            compiled = compile_flashokf(message, next(iter(mentioned_tickers), str(selected.get("ticker") or "")))
+        else:
+            compiled = {"hit": False}
         evidence_nodes = deepcopy(compiled.get("evidence_nodes") or gather_evidence(selected, message, scoped_nodes))
         evidence_nodes = [n for n in evidence_nodes if n.get("ticker") in mentioned_tickers]
         if compiled.get("hit"):

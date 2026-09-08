@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "agent": "finokf",
+  "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+  "warnings": [],
+  "sources": [
+    "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+  ],
+  "source_files": [
+    {
+      "title": "AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "path": "data/vaults/answers/aapl-20260908t223726364264z-aa4c6319a7f0/documents/d5885b6b79d5-02c67f11f7227ced/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "source_path": "data/processed/filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+    }
+  ],
+  "model": "claude-sonnet-5",
+  "provider": "anthropic",
+  "answer": "## Apple Consolidated Gross Margin: FY2023\u2013FY2025\n\n**Conclusion:** Apple retained meaningfully more of each revenue dollar after direct costs over this period, but the pace of improvement decelerated sharply \u2014 margin gains were front-loaded in FY2024.\n\n| Fiscal Year | Revenue ($M) | COGS ($M) | Gross Margin | YoY Change (bps) |\n|---|---:|---:|---:|---:|\n| FY2023 | 383,285 | 214,137 | 44.13% | \u2014 |\n| FY2024 | 391,035 | 210,352 | 46.21% | +207.5 |\n| FY2025 | 416,161 | 220,960 | 46.91% | +69.9 |\n\n**Drivers of the trend:**\n- Total margin expansion across the two years is +278 bps (44.13% \u2192 46.91%), a meaningful structural improvement in cost-of-revenue efficiency relative to sales.\n- The improvement was not linear: FY2024's +207.5 bps gain was ~3x larger than FY2025's +69.9 bps gain, indicating the rate of margin expansion is **weakening**, not strengthening.\n- FY2025 revenue grew faster in absolute terms (+$25.1B) than FY2024 (+$7.8B), yet COGS also rose more (+$10.6B vs. -$3.8B in FY2024), which compressed the margin expansion despite higher volume.\n\n**What this does and does not establish:**\n- The data confirms Apple is capturing a larger residual of gross revenue after direct costs (COGS) than in FY2023, consistent with better retention of each revenue dollar at the gross-profit line.\n- It does **not** identify why \u2014 mix shift (services vs. hardware), input costs, pricing, or FX are all plausible but unverified from this data alone.\n- This is a gross-margin measure only; it does not speak to operating margin, net income quality, or cash conversion.\n\n**Sources:**\n- `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`",
+  "method": "auto",
+  "route": "anthropic-measured-synthesis",
+  "cache_hit": true,
+  "cache_kind": "calculation-lru",
+  "metrics": {
+    "total_ms": 12116.351,
+    "route_ms": 0.006,
+    "bind_ms": 11.802,
+    "model_ms": 12029.299,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "llm_cache_hit": false,
+    "evidence_cache_hit": true,
+    "web_requests": 0,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "prompt_tokens": 1392,
+    "completion_tokens": 699,
+    "total_tokens": 2091,
+    "ollama_total_ms": 0,
+    "ollama_load_ms": 0,
+    "request_ids": [
+      "msg_011CermoAbwjFaNb5RVqzuHR"
+    ],
+    "persist_ms": 9.908,
+    "source_count": 1,
+    "local_ms": 87.052
+  }
+}

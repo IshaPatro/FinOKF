@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "agent": "finokf",
+  "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+  "warnings": [],
+  "sources": [
+    "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+  ],
+  "source_files": [
+    {
+      "title": "MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "path": "data/vaults/answers/msft-20260908t221140794429z-fdd1407f2e64/documents/112284a11d2a-16511187777c7194/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "source_path": "data/processed/filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+    }
+  ],
+  "model": "gpt-5.5",
+  "provider": "openai",
+  "answer": "**Conclusion:** Microsoft\u2019s consolidated profitability of growth **strengthened sharply in FY2024, then still strengthened but less in FY2025**. Operating leverage was positive in both growth intervals because operating income grew faster than revenue, but the profitability of each additional revenue dollar **weakened from FY2024 to FY2025**.\n\n| Fiscal year | Revenue (USD mm) | Operating income (USD mm) | Operating margin | Change vs prior year | Incremental operating margin |\n|---|---:|---:|---:|---:|---:|\n| FY2023 | 211,915 | 88,523 | 41.77% | \u2014 | \u2014 |\n| FY2024 | 245,122 | 109,433 | 44.64% | +287.1 bps | 62.97% |\n| FY2025 | 281,724 | 128,528 | 45.62% | +97.8 bps | 52.17% |\n\n**Assessment:**  \nFrom FY2023 to FY2024, revenue rose **$33.207 billion** while operating income rose **$20.910 billion**, producing a **62.97% incremental operating margin**, well above the FY2023 base margin of **41.77%**. That indicates strong consolidated operating leverage.\n\nFrom FY2024 to FY2025, revenue rose a larger **$36.602 billion**, but operating income rose **$19.095 billion**, implying a lower **52.17% incremental operating margin**. This was still above the FY2024 margin of **44.64%**, so operating leverage remained positive, but the incremental profitability of growth **moderated**.\n\nThese reported-period ratios show how profit scaled with revenue; they **do not establish causal drivers or future persistence**.\n\n**Source:** `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`",
+  "method": "auto",
+  "route": "openai-measured-synthesis",
+  "cache_hit": true,
+  "cache_kind": "calculation-lru",
+  "metrics": {
+    "total_ms": 13126.153,
+    "route_ms": 0.008,
+    "bind_ms": 10.349,
+    "model_ms": 13045.504,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "llm_cache_hit": false,
+    "evidence_cache_hit": true,
+    "web_requests": 0,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "prompt_tokens": 939,
+    "completion_tokens": 458,
+    "total_tokens": 1397,
+    "ollama_total_ms": 0,
+    "ollama_load_ms": 0,
+    "request_ids": [
+      "req_987a5d8b394648e6a145160ed176df05"
+    ],
+    "persist_ms": 12.305,
+    "source_count": 1,
+    "local_ms": 80.649
+  }
+}

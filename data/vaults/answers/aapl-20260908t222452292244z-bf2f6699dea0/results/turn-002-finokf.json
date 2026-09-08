@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "agent": "finokf",
+  "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+  "warnings": [],
+  "sources": [
+    "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+  ],
+  "source_files": [
+    {
+      "title": "AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "path": "data/vaults/answers/aapl-20260908t222452292244z-bf2f6699dea0/documents/d5885b6b79d5-02c67f11f7227ced/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "source_path": "data/processed/filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+    }
+  ],
+  "model": "gpt-5.5",
+  "provider": "openai",
+  "answer": "**Conclusion: Apple\u2019s consolidated gross margin shows improvement, but it is better characterized as an uneven improvement rather than steady linear progress.** Margin rose from **44.13% in FY2023** to **46.21% in FY2024**, then to **46.91% in FY2025**; however, the pace slowed materially from **+207.5 bps** in FY2024 to **+69.9 bps** in FY2025. [`filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`]\n\n| Fiscal year | Revenue, USD mm | Cost of revenue, USD mm | Gross margin | YoY change |\n|---|---:|---:|---:|---:|\n| FY2023 | 383,285 | 214,137 | 44.13% | \u2014 |\n| FY2024 | 391,035 | 210,352 | 46.21% | +207.5 bps |\n| FY2025 | 416,161 | 220,960 | 46.91% | +69.9 bps |\n\n**Why it matters for an analyst:** gross margin is a key indicator of Apple\u2019s pricing power, cost structure, product/service mix, and operating leverage before R&D, SG&A, taxes, and capital allocation. The improvement means a larger share of each revenue dollar flowed through as gross profit: calculated gross profit increased from **$169.148 billion** in FY2023 to **$180.683 billion** in FY2024 and **$195.201 billion** in FY2025.\n\n**Limits:** these consolidated ratios do **not** identify the cause of the improvement, such as mix, input costs, foreign exchange, pricing, or supply-chain effects. They also do not prove persistence; the decelerating basis-point gain warns against mechanically extrapolating the FY2023\u2013FY2025 trend into future years.\n\n**Source:** `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`",
+  "method": "auto",
+  "route": "openai-measured-synthesis",
+  "cache_hit": true,
+  "cache_kind": "calculation-lru",
+  "metrics": {
+    "total_ms": 14905.826,
+    "route_ms": 0.009,
+    "bind_ms": 16.52,
+    "model_ms": 14803.116,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "llm_cache_hit": false,
+    "evidence_cache_hit": true,
+    "web_requests": 0,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "prompt_tokens": 870,
+    "completion_tokens": 505,
+    "total_tokens": 1375,
+    "ollama_total_ms": 0,
+    "ollama_load_ms": 0,
+    "request_ids": [
+      "req_e906ca518d2c44d087dd79a6846f4828"
+    ],
+    "persist_ms": 11.339,
+    "source_count": 1,
+    "local_ms": 102.71
+  }
+}

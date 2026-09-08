@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "agent": "finokf",
+  "data_access": "Local filings and stock prices from data/prices; web research for missing non-price evidence",
+  "warnings": [],
+  "sources": [
+    "filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+  ],
+  "source_files": [
+    {
+      "title": "AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "path": "data/vaults/answers/aapl-20260908t210510856010z-7a6e05bed7e8/documents/d5885b6b79d5-02c67f11f7227ced/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md",
+      "source_path": "data/processed/filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md"
+    }
+  ],
+  "model": "llama3.2:3b",
+  "provider": "ollama",
+  "answer": "Conclusion: Apple's consolidated gross margin increased by 207.5 basis points from FY2023 to FY2024 and by 69.9 basis points from FY2024 to FY2025. The pace of improvement in gross margin appears to be strengthening.\n\nDrivers: The increase in gross margin from FY2023 to FY2024 can be attributed to a 6.8% decrease in cost of revenue, while revenue increased by 2.2%. The further improvement from FY2024 to FY2025 may be driven by increased pricing power, operational efficiencies, or a combination of both.\n\nQuantifications:\n\n| Fiscal year (exact period) | Revenue (USD millions) | Cost of Revenue (USD millions) | Gross Margin Change (basis points) |\n| --- | ---: | ---: | ---: |\n| FY2023 to FY2024 | 2.2% | -6.8% | +207.5 basis points |\n| FY2024 to FY2025 | 6.5% | -5.4% | +69.9 basis points |\n\nCalculations:\n\n- FY2023 to FY2024: ((383,285 - 214,137) / 383,285) \u00d7 100 = 44.13% \u2192 ((391,035 - 210,352) / 391,035) \u00d7 100 = 46.21% \u2192 +207.5 basis points\n- FY2024 to FY2025: ((391,035 - 210,352) / 391,035) \u00d7 100 = 46.21% \u2192 ((416,161 - 220,960) / 416,161) \u00d7 100 = 46.91% \u2192 +69.9 basis points\n\nTable:\n\n| Fiscal year (exact period) | Revenue (USD millions) | Cost of Revenue (USD millions) | Gross Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 (2022-09-25 to 2023-09-30) | 383,285.000 | 214,137.000 | 44.13% |\n| FY2024 (2023-10-01 to 2024-09-28) | 391,035.000 | 210,352.000 | 46.21% |\n| FY2025 (2024-09-29 to 2025-09-27) | 416,161.000 | 220,960.000 | 46.91% |\n\nSources:\n- `filings/AAPL/AAPL-FY2025-10-K-2025-10-31-0000320193-25-000079.md`\n- `data/prices/sp100_yahoo/daily`",
+  "method": "auto",
+  "route": "ollama-measured-synthesis",
+  "cache_hit": false,
+  "cache_kind": "measured-evidence",
+  "metrics": {
+    "total_ms": 8930.113,
+    "route_ms": 0.016,
+    "bind_ms": 28.32,
+    "model_ms": 8766.355,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "llm_cache_hit": false,
+    "evidence_cache_hit": false,
+    "web_requests": 0,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "prompt_tokens": 898,
+    "completion_tokens": 573,
+    "total_tokens": 1471,
+    "ollama_total_ms": 8765.325,
+    "ollama_load_ms": 0.926,
+    "request_ids": [],
+    "persist_ms": 13.71,
+    "source_count": 1,
+    "local_ms": 163.758
+  }
+}

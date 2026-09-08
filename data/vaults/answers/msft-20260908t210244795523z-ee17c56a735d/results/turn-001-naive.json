@@ -1,0 +1,269 @@
+{
+  "agent": "naive",
+  "provider": "ollama",
+  "model": "llama3.2:3b",
+  "route": "web-research",
+  "cache_hit": false,
+  "experiment": "standard baseline",
+  "data_access": "Public web search and page retrieval; independent numerical review; uncached",
+  "ok": true,
+  "answer": "**Assessment of Microsoft's Profitability across FY2023, FY2024, and FY2025**\n\nGiven the limitations of the provided web evidence, a comprehensive analysis of Microsoft's profitability across the specified years is not feasible. The available information includes:\n\n1.  Microsoft's 2025 Annual Report, which provides an overview of the company's performance for the fiscal year ending June 30, 2025.\n2.  The 2024 Annual Report and 2023 Annual Report, which offer insights into the company's performance for the previous fiscal years.\n3.  Various search results, including news articles and SEC filings, which provide additional context and information about Microsoft's business operations and financial performance.\n\nHowever, the provided web evidence does not include the revenue figures for FY2023, FY2024, and FY2025. As a result, it is not possible to assess the profitability of Microsoft's growth across these periods.\n\n**Consolidated Operating Leverage**\n\nThe provided web evidence does not include information on consolidated operating leverage. However, the 2025 Annual Report provides an overview of Microsoft's segments, including the Productivity and Business Processes segment, which includes Microsoft 365 Commercial cloud revenue growth.\n\n**Conclusion**\n\nDue to the limitations of the provided web evidence, a comprehensive analysis of Microsoft's profitability across FY2023, FY2024, and FY2025 is not feasible. The available information includes an overview of the company's performance for the fiscal year ending June 30, 2025, as well as various search results and SEC filings. However, the revenue figures for FY2023, FY2024, and FY2025 are not available, making it impossible to assess the profitability of Microsoft's growth across these periods.\n\n**Table: Microsoft's Revenue Growth**\n\n| Year | Revenue Growth |\n| --- | --- |\n| FY2023 | Not available |\n| FY2024 | Not available |\n| FY2025 | Not available |\n\n**Sources:**\n\n*   Microsoft 2025 Annual Report: <https://www.microsoft.com/investor/reports/ar25/index.html>\n*   Microsoft 2024 Annual Report: <https://www.microsoft.com/en-us/investor/annual-reports>\n*   Microsoft 2023 Annual Report: <https://www.microsoft.com/en-us/investor/annual-reports>\n*   Various search results: <https://www.google.com/search>\n*   SEC Filings: <https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/0000950170-25-100235-index.htm>",
+  "sources": [
+    {
+      "title": "Microsoft \u2013 AI, Cloud, Productivity, Computing, Gaming & Apps",
+      "url": "https://www.microsoft.com/en-us?msockid=0a68307a7fa86f6a2d9a27b47e5a6e64",
+      "snippet": "Explore Microsoft products and services and support for your home or business. Shop Microsoft 365, Copilot, Teams, Xbox, \u2026",
+      "kind": "retrieved page text (may be excerpted)",
+      "retrieved_at": "2026-09-08T21:02:45.840562+00:00",
+      "text": "Your request has been blocked. This could be \n due to several reasons. \n Skip \n to main content \n Your current User-Agent string appears to be from an automated process, if this is incorrect, please click this link:\n United States English Microsoft Homepage"
+    },
+    {
+      "title": "Microsoft account | Sign In or Create Your Account Today ...",
+      "url": "https://account.microsoft.com/account",
+      "snippet": "It\u2019s all here with Microsoft account Your Microsoft account connects all your Microsoft apps and services. Sign in to manage your \u2026",
+      "kind": "retrieved page text (may be excerpted)",
+      "retrieved_at": "2026-09-08T21:02:45.840579+00:00",
+      "text": "Microsoft account | Sign In or Create Your Account Today \u2013 Microsoft \n To use everything on this website, turn on JavaScript in your browser settings.\n Learn how \n To use everything on this website, turn on cookies in your browser settings. Read why and how we use cookies. \n Learn how \n Skip to main content \n Account \n Help \n English (United States) \n Your Privacy Choices Opt-Out Icon \n Your Privacy Choices \n Your Privacy Choices Opt-Out Icon \n Your Privacy Choices \n Consumer Health Privacy \n Privacy & cookies \n Terms of use \n Contact us \n Feedback \n Manage cookies"
+    },
+    {
+      "title": "My Account",
+      "url": "https://myaccount.microsoft.com/",
+      "snippet": "Access and manage your Microsoft account, subscriptions, and settings all in one place.",
+      "kind": "retrieved page text (may be excerpted)",
+      "retrieved_at": "2026-09-08T21:02:45.840584+00:00",
+      "text": "My Account"
+    },
+    {
+      "title": "Microsoft 365 for Individuals: Subscription for Productivity Apps",
+      "url": "https://www.microsoft.com/en-us/microsoft-365?msockid=0a68307a7fa86f6a2d9a27b47e5a6e64",
+      "snippet": "Microsoft 365 (formerly Office 365) subscriptions offer a suite of productivity tools and cloud services with world-class security and \u2026",
+      "kind": "retrieved page text (may be excerpted)",
+      "retrieved_at": "2026-09-08T21:02:45.840588+00:00",
+      "text": "Your request has been blocked. This could be \n due to several reasons. \n Skip \n to main content \n Your current User-Agent string appears to be from an automated process, if this is incorrect, please click this link:\n United States English Microsoft Homepage"
+    },
+    {
+      "title": "My Account",
+      "url": "https://myaccount.microsoft.com/login",
+      "snippet": "Sign in to manage your Microsoft account and access free online services like Outlook, Word, Excel, and PowerPoint securely from \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:45.840592+00:00"
+    },
+    {
+      "title": "XBOX Official Site: Play Games Anywhere | XBOX",
+      "url": "https://www.xbox.com/en-US/?msockid=0a68307a7fa86f6a2d9a27b47e5a6e64",
+      "snippet": "Experience the new generation of games and entertainment with XBOX. Explore consoles, new and old XBOX games and \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:45.840597+00:00"
+    },
+    {
+      "title": "Microsoft \u2013 AI, Cloud, Productivity, Computing, Gaming & Apps",
+      "url": "https://www.microsoft.com/en-us?msockid=329acfe89e1962380a55d8269f3363d4",
+      "snippet": "Explore Microsoft products and services and support for your home or business. Shop Microsoft 365, Copilot, Teams, Xbox, \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:46.275861+00:00"
+    },
+    {
+      "title": "Microsoft 365 for Individuals: Subscription for Productivity Apps",
+      "url": "https://www.microsoft.com/en-us/microsoft-365?msockid=329acfe89e1962380a55d8269f3363d4",
+      "snippet": "Microsoft 365 (formerly Office 365) subscriptions offer a suite of productivity tools and cloud services with world-class security and \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:46.275872+00:00"
+    },
+    {
+      "title": "XBOX Official Site: Play Games Anywhere | XBOX",
+      "url": "https://www.xbox.com/en-US/?msockid=329acfe89e1962380a55d8269f3363d4",
+      "snippet": "Experience the new generation of games and entertainment with XBOX. Explore consoles, new and old XBOX games and \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:46.275875+00:00"
+    },
+    {
+      "title": "Microsoft 2025 Annual Report",
+      "url": "https://www.microsoft.com/investor/reports/ar25/index.html",
+      "snippet": "Our annual report on Form 10 - K , quarterly reports on Form 10-Q, current reports on Form 8- K , and any amendments to those reports, as soon as reasonably practicable after we electronically file that material with or furnish it to the Securities and Exchange Commission (\u201cSEC\u201d) at www.sec.gov.",
+      "kind": "retrieved page text (may be excerpted)",
+      "retrieved_at": "2026-09-08T21:02:47.129981+00:00",
+      "text": "et, and drive increased engagement with our services like Microsoft Edge, Bing, Copilot, Microsoft Teams, Microsoft 365 Consumer, Xbox Game Pass, and more. \n Tackling security from all angles with our integrated, end-to-end solutions spanning security, compliance, identity, and management, across all clouds and platforms. \n Our future growth depends on our ability to transcend current product category definitions, business models, and sales motions.\n Commitment to Sustainability \n Microsoft is committed to sustainability and our approach to addressing climate change starts with the sustainability of our own business. In 2020, we announced goals to become a carbon negative, water positive, and zero waste company by 2030. Since announcing these goals, we have made meaningful progress while having seen major changes in both the technology sector and in our understanding of what it will take to meet our goals. Progress toward these goals can be found in our annual Environmental Sustainability Report.\n OPERATING SEGMENTS\n We operate our business and report our financial performance using three segments: Productivity and Business Processes, Intelligent Cloud, and More Personal Computing. Our segments provide management with a comprehensive financial view of our key businesses. The segments enable the alignment of strategies and objectives across the development, sales, marketing, and services organizations, and they provide a framework for timely and rational allocation of resources within businesses.\n In August 2024, we announced changes to the composition of our segments. These changes align our segments with how we currently manage our business, most notably bringing the commercial components of Microsoft 365 together in the Productivity and Business Processes segment. Beg\n\nns, Xbox Cloud Gaming, advertising, and other cloud services. \n Search and news advertising, comprising Bing and Copilot, Microsoft News, Microsoft Edge, and third-party affiliates. \n Windows and Devices \n The Windows operating system is designed to deliver a more personal computing experience for users by enabling consistency of experience, applications, and information across their devices. Windows OEM revenue is impacted significantly by the number of Windows operating system licenses purchased by OEMs, which they pre-install on the devices they sell. In addition to computing device market volume, Windows OEM revenue is impacted by:\n The mix of computing devices based on form factor and screen size. \n Differences in device market demand between developed markets and growth markets. \n Growth of the AI PC category. \n Attachment of Windows to devices shipped. \n Customer mix between consumer, small and medium businesses, and large enterprises. \n Changes in inventory levels in the OEM channel. \n Pricing changes and promotions, pricing variation that occurs when the mix of devices manufactured shifts from local and regional system builders to large multinational OEMs, and different pricing of Windows versions licensed. \n Constraints in the supply chain of device components. \n Piracy. \n We design and sell devices, such as Surface (including Copilot+ PCs) and PC accessories. Our devices are designed to enable people and organizations to connect to the people and content that matter most using Windows and integrated Microsoft products and services. Surface is designed to help organizations, students, and consumers be more productive. Growth in Devices is dependent on total PC shipments, the ability to attract new customers, our product roadmap, and expanding into new categori\n\n reporting.\n In August 2024, we announced changes to the composition of our segments. These changes align our segments with how we currently manage our business, most notably bringing the commercial components of Microsoft 365 together in the Productivity and Business Processes segment. Beginning in fiscal year 2025, the information that our chief operating decision maker is regularly provided and reviews for purposes of allocating resources and assessing performance reflects these segment changes. Prior period segment information has been recast to conform to the way we internally manage and monitor our business during fiscal year 2025.\n Additional information on our reportable segments is contained in Note 18 \u2013 Segment Information and Geographic Data of the Notes to Financial Statements.\n Metrics \n We use metrics in assessing the performance of our business and to make informed decisions regarding the allocation of resources. We disclose metrics to enable investors to evaluate progress against our ambitions, provide transparency into performance trends, and reflect the continued evolution of our products and services. Our commercial and other business metrics are fundamentally connected based on how customers use our products and services. The metrics are disclosed in the MD&A or the Notes to Financial Statements. Financial metrics are calculated based on financial results prepared in accordance with accounting principles generally accepted in the United States of America (\u201cGAAP\u201d), and growth comparisons relate to the corresponding period of last fiscal year.\n In the first quarter of fiscal year 2025, we made updates to our metrics in connection with the segment changes described above. These changes align our metrics with how we manage and monitor certain businesses.\n\n\u201cGAAP\u201d), and growth comparisons relate to the corresponding period of last fiscal year.\n In the first quarter of fiscal year 2025, we made updates to our metrics in connection with the segment changes described above. These changes align our metrics with how we manage and monitor certain businesses. The key change was bringing the commercial components of Microsoft 365 together and creating a new Microsoft 365 Commercial cloud revenue growth metric. Other changes include combining Windows OEM and Devices into a single revenue growth metric that brings revenue from PC market-driven businesses together, as well as elevating our cloud revenue growth metrics to align to our strategic focus on cloud growth.\n Commercial \n Our commercial business primarily consists of Server products and cloud services, Microsoft 365 Commercial products and cloud services, the commercial portion of LinkedIn, Dynamics products and cloud services, and Enterprise and partner services. Our commercial metrics allow management and investors to assess the overall health of our commercial business and include leading indicators of future performance.\n Commercial remaining performance obligation\n | \n Commercial portion of revenue allocated to remaining performance obligations, which includes unearned revenue and amounts that will be invoiced and recognized as revenue in future periods\n | \n Microsoft Cloud revenue and revenue growth\n | \n Revenue from Microsoft 365 Commercial cloud, Azure and other cloud services, the commercial portion of LinkedIn, and Dynamics 365\n | \n Microsoft Cloud gross margin percentage\n | \n Gross margin percentage for our Microsoft Cloud business\n | \n Productivity and Business Processes and Intelligent Cloud \n Metrics related to our Productivity and Business Processes and Intelli\n\nces, the commercial portion of LinkedIn, and Dynamics 365\n | \n Microsoft Cloud gross margin percentage\n | \n Gross margin percentage for our Microsoft Cloud business\n | \n Productivity and Business Processes and Intelligent Cloud \n Metrics related to our Productivity and Business Processes and Intelligent Cloud segments assess the health of our core businesses within these segments. The metrics primarily reflect growth across our cloud services.\n Microsoft 365 Commercial cloud revenue growth\n | \n Revenue from Microsoft 365 Commercial subscriptions, comprising Microsoft 365 Commercial, Enterprise Mobility + Security, the cloud portion of Windows Commercial, the per-user portion of Power BI, Exchange, SharePoint, Microsoft Teams, Microsoft 365 Security and Compliance, and Microsoft 365 Copilot\n | \n Microsoft 365 Commercial seat growth\n | \n The number of Microsoft 365 Commercial seats at end of period where seats are paid users covered by a Microsoft 365 Commercial subscription\n | \n Microsoft 365 Consumer cloud revenue growth\n | \n Revenue from Microsoft 365 Consumer subscriptions and other consumer services\n | \n Microsoft 365 Consumer subscribers\n | \n The number of Microsoft 365 Consumer subscribers at end of period\n | \n LinkedIn revenue growth\n | \n Revenue from LinkedIn, including Talent Solutions, Marketing Solutions, Premium Subscriptions, and Sales Solutions\n | \n Dynamics 365 revenue growth\n | \n Revenue from Dynamics 365, including a set of intelligent, cloud-based applications across ERP, CRM, Power Apps, and Power Automate\n | \n Azure and other cloud services revenue growth\n | \n Revenue from Azure and other cloud services, including cloud and AI consumption-based services, GitHub cloud services, Nuance Healthcare cloud services, virtual desktop offerings, and other clou\n\ns across ERP, CRM, Power Apps, and Power Automate\n | \n Azure and other cloud services revenue growth\n | \n Revenue from Azure and other cloud services, including cloud and AI consumption-based services, GitHub cloud services, Nuance Healthcare cloud services, virtual desktop offerings, and other cloud services\n | \n More Personal Computing \n Metrics related to our More Personal Computing segment assess the performance of our key consumer businesses.\n Windows OEM and Devices revenue growth\n | \n Revenue from sales of Windows Pro and non-Pro licenses sold through the OEM channel and sales of first-party Devices, including Surface and PC accessories\n | \n Xbox content and services revenue growth\n | \n Revenue from Xbox content and services, comprising first- and third-party content (including games and in-game content), Xbox Game Pass and other subscriptions, Xbox Cloud Gaming, advertising, and other cloud services\n | \n Search and news advertising revenue (ex TAC) growth\n | \n Revenue from search and news advertising excluding traffic acquisition costs (\u201cTAC\u201d) paid to Bing Ads network publishers and news partners\n | \n SUMMARY RESULTS OF OPERATIONS\n (In millions, except percentages and per share amounts) | \n 2025 | \n 2024 | \n Percentage \n Change\n | \n Revenue | \n $ 281,724 | \n $ 245,122 | \n 15% | \n Gross margin | \n 193,893 | \n 171,008 | \n 13% | \n Operating income | \n 128,528 | \n 109,433 | \n 17% | \n Net income | \n 101,832 | \n 88,136 | \n 16% | \n Diluted earnings per share | \n 13.64 | \n 11.80 | \n 16% | \n Fiscal Year 2025 Compared with Fiscal Year 2024 \n Revenue increased $36.6 billion or 15% with growth across each of our segments. Intelligent Cloud revenue increased driven by Azure. Productivity and Business Processes revenue increased driven by Microsoft 365 Commercial cloud. More \n\n.80 | \n 16% | \n Fiscal Year 2025 Compared with Fiscal Year 2024 \n Revenue increased $36.6 billion or 15% with growth across each of our segments. Intelligent Cloud revenue increased driven by Azure. Productivity and Business Processes revenue increased driven by Microsoft 365 Commercial cloud. More Personal Computing revenue increased driven by Gaming and Search and news advertising.\n Cost of revenue increased $13.7 billion or 19% driven by growth in Microsoft Cloud.\n Gross margin increased $22.9 billion or 13% with growth across each of our segments.\n Gross margin percentage decreased slightly driven by Intelligent Cloud, offset in part by More Personal Computing. \n Microsoft Cloud gross margin percentage decreased to 69% driven by the impact of scaling our AI infrastructure, offset in part by efficiency gains in Azure. \n Operating expenses increased $3.8 billion or 6% driven by investments in cloud and AI engineering and Gaming, including the impact of the Activision Blizzard acquisition.\n Operating income increased $19.1 billion or 17% with growth across each of our segments.\n SEGMENT RESULTS OF OPERATIONS\n (In millions, except percentages) | \n 2025 | \n | \n 2024 | \n Percentage \n Change\n | \n Productivity and Business Processes | \n | \n | \n | \n | \n Revenue | \n $ 120,810 | \n | \n $ 106,820 | \n 13% | \n Cost of revenue | \n 22,422 | \n | \n 19,611 | \n 14% | \n Operating expenses | \n 28,615 | \n | \n 27,548 | \n 4% | \n Operating Income | \n $ 69,773 | \n | \n $ 59,661 | \n 17% | \n Intelligent Cloud | \n | \n | \n | \n | \n Revenue | \n $ 106,265 | \n | \n $ 87,464 | \n 21% | \n Cost of revenue | \n 40,171 | \n | \n 29,611 | \n 36% | \n Operating expenses | \n 21,505 | \n | \n 20,040 | \n 7% | \n Operating Income | \n $ 44,589 | \n | \n $ 37,813 | \n 18% | \n More Personal Computing | \n | \n | \n | \n | \n Revenue \n\nt Cloud | \n | \n | \n | \n | \n Revenue | \n $ 106,265 | \n | \n $ 87,464 | \n 21% | \n Cost of revenue | \n 40,171 | \n | \n 29,611 | \n 36% | \n Operating expenses | \n 21,505 | \n | \n 20,040 | \n 7% | \n Operating Income | \n $ 44,589 | \n | \n $ 37,813 | \n 18% | \n More Personal Computing | \n | \n | \n | \n | \n Revenue | \n $ 54,649 | \n | \n $ 50,838 | \n 7% | \n Cost of revenue | \n 25,238 | \n | \n 24,892 | \n 1% | \n Operating expenses | \n 15,245 | \n | \n 13,987 | \n 9% | \n Operating Income | \n $ 14,166 | \n | \n $ 11,959 | \n 18% | \n Total | \n | \n | \n | \n | \n Revenue | \n $ 281,724 | \n | \n $ 245,122 | \n 15% | \n Cost of revenue | \n 87,831 | \n | \n 74,114 | \n 19% | \n Operating expenses | \n 65,365 | \n | \n 61,575 | \n 6% | \n Operating Income | \n $ 128,528 | \n | \n $ 109,433 | \n 17% | \n Reportable Segments \n Fiscal Year 2025 Compared with Fiscal Year 2024 \n Productivity and Business Processes \n Revenue increased $14.0 billion or 13%.\n Microsoft 365 Commercial products and cloud services revenue increased $10.8 billion or 14%. Microsoft 365 Commercial cloud revenue grew 15% with Microsoft 365 Commercial seat growth of 6% driven by small and medium businesses and frontline worker offerings, as well as growth in revenue per user. Microsoft 365 Commercial products revenue grew 7% driven by the Windows Commercial on-premises components of Microsoft 365 suite sales and an increase in Office transactional purchasing with the launch of Office 2024. \n Microsoft 365 Consumer products and cloud services revenue increased $756 million or 11%. Microsoft 365 Consumer cloud revenue grew 11% driven by Microsoft 365 Consumer subscriber growth of 8% to 89.0 million, as well as growth in revenue per user from the price increase announced in January 2025. \n LinkedIn revenue increased $1.4 billion or 9% with growth across all lin\n\n million or 11%. Microsoft 365 Consumer cloud revenue grew 11% driven by Microsoft 365 Consumer subscriber growth of 8% to 89.0 million, as well as growth in revenue per user from the price increase announced in January 2025. \n LinkedIn revenue increased $1.4 billion or 9% with growth across all lines of business. \n Dynamics products and cloud services revenue increased $996 million or 15% driven by growth in Dynamics 365, offset in part by a decline in Dynamics on-premises products. Dynamics 365 revenue grew 19% with growth across all workloads. \n Operating income increased $10.1 billion or 17%.\n Cost of revenue increased $2.8 billion or 14% driven by growth in Microsoft 365 Commercial cloud. \n Gross margin increased $11.2 billion or 13% driven by growth in Microsoft 365 Commercial cloud. Gross margin percentage decreased slightly primarily driven by the impact of scaling our AI infrastructure, offset in part by efficiency gains in Microsoft 365 Commercial cloud. \n Operating expenses increased $1.1 billion or 4% driven by investments in cloud and AI engineering and commercial sales. \n Intelligent Cloud \n Revenue increased $18.8 billion or 21%.\n Server products and cloud services revenue increased $18.6 billion or 23% driven by Azure and other cloud services. Azure and other cloud services revenue grew 34% driven by demand for our portfolio of services. Server products revenue decreased 3% driven by a decrease in transactional purchasing with continued customer shift to cloud offerings. \n Enterprise and partner services revenue increased $166 million or 2% driven by growth in Enterprise Support Services, offset in part by a decline in Industry Solutions. \n Operating income increased $6.8 billion or 18%.\n Cost of revenue increased $10.6 billion or 36% driven by growth in\n\n million or 1% driven by growth in Search and news advertising. \n Gross margin increased $3.5 billion or 13% with growth across all businesses. Gross margin percentage increased with improvement across all businesses. \n Operating expenses increased $1.3 billion or 9% driven by Gaming, including the impact of the Activision Blizzard acquisition. \n OPERATING EXPENSES\n Research and Development \n (In millions, except percentages) | \n 2025 | \n 2024 | \n Percentage \n Change\n | \n Research and development | \n $ 32,488 | \n $ 29,510 | \n 10% | \n As a percent of revenue | \n 12% | \n 12% | \n 0ppt | \n Research and development expenses include payroll, employee benefits, stock-based compensation expense, and other headcount-related expenses associated with product development. Research and development expenses also include technology development costs, including AI training and other infrastructure costs, third-party development and programming costs, and the amortization of purchased software code and services content.\n Fiscal Year 2025 Compared with Fiscal Year 2024 \n Research and development expenses increased $3.0 billion or 10% driven by investments in cloud and AI engineering and Gaming, including the impact of the Activision Blizzard acquisition.\n Sales and Marketing \n (In millions, except percentages) | \n 2025 | \n 2024 | \n Percentage \n Change\n | \n Sales and marketing | \n $ 25,654 | \n $ 24,456 | \n 5% | \n As a percent of revenue | \n 9% | \n 10% | \n (1)ppt | \n Sales and marketing expenses include payroll, employee benefits, stock-based compensation expense, and other headcount-related expenses associated with sales and marketing personnel, and the costs of advertising, promotions, trade shows, seminars, and other programs.\n Fiscal Year 2025 Compared with Fiscal Year 2024 \n Sales and\n\nlaration by our Board of Directors. Refer to Note 15 \u2013 Stockholders\u2019 Equity of the Notes to Financial Statements.\n Other Planned Uses of Capital \n We will continue to invest in sales, marketing, product support infrastructure, and existing and advanced areas of technology, as well as acquisitions that align with our business strategy. Additions to property and equipment will continue, including new facilities, datacenters, and computer systems for research and development, sales and marketing, support, and administrative staff. We will continue to invest in capital expenditures to support growth in our cloud offerings and our investments in AI infrastructure and training. We have operating and finance leases for datacenters, corporate offices, research and development facilities, Microsoft Experience Centers, and certain equipment. We have not engaged in any related party transactions or arrangements with unconsolidated entities or other persons that are reasonably likely to materially affect liquidity or the availability of capital resources.\n RECENT ACCOUNTING GUIDANCE\n Refer to Note 1 \u2013 Accounting Policies of the Notes to Financial Statements.\n CRITICAL ACCOUNTING ESTIMATES\n Our consolidated financial statements and accompanying notes are prepared in accordance with GAAP. Preparing consolidated financial statements requires management to make estimates and assumptions that affect the reported amounts of assets, liabilities, revenue, and expenses. Critical accounting estimates are those estimates that involve a significant level of estimation uncertainty and could have a material impact on our financial condition or results of operations. We have critical accounting estimates in the areas of revenue recognition, impairment of investment securities, goodwill, research \n\n | \n | \n | \n | \n | \n | \n Net income | \n $ 101,832 | \n | \n $ 88,136 | \n | \n $ 72,361 | \n Adjustments to reconcile net income to net cash from operations: | \n | \n | \n | \n | \n | \n Depreciation, amortization, and other | \n 34,153 | \n | \n 22,287 | \n | \n 13,861 | \n Stock-based compensation expense | \n 11,974 | \n | \n 10,734 | \n | \n 9,611 | \n Net recognized losses on investments and derivatives | \n 609 | \n | \n 305 | \n | \n 196 | \n Deferred income taxes | \n (7,056) | \n | \n (4,738) | \n | \n (6,059) | \n Changes in operating assets and liabilities: | \n | \n | \n | \n | \n | \n Accounts receivable | \n (10,581) | \n | \n (7,191) | \n | \n (4,087) | \n Inventories | \n 309 | \n | \n 1,284 | \n | \n 1,242 | \n Other current assets | \n (3,044) | \n | \n (1,648) | \n | \n (1,991) | \n Other long-term assets | \n (2,950) | \n | \n (6,817) | \n | \n (2,833) | \n Accounts payable | \n 569 | \n | \n 3,545 | \n | \n (2,721) | \n Unearned revenue | \n 5,438 | \n | \n 5,348 | \n | \n 5,535 | \n Income taxes | \n (38) | \n | \n 1,687 | \n | \n (358) | \n Other current liabilities | \n 5,922 | \n | \n 4,867 | \n | \n 2,272 | \n Other long-term liabilities | \n (975) | \n | \n 749 | \n | \n 553 | \n Net cash from operations | \n 136,162 | \n | \n 118,548 | \n | \n 87,582 | \n Financing | \n | \n | \n | \n | \n | \n Proceeds from issuance (repayments) of debt, maturities of 90 days or less, net | \n (5,746) | \n | \n 5,250 | \n | \n 0 | \n Proceeds from issuance of debt | \n 0 | \n | \n 24,395 | \n | \n 0 | \n Repayments of debt | \n (3,216) | \n | \n (29,070) | \n | \n (2,750) | \n Common stock issued | \n 2,056 | \n | \n 2,002 | \n | \n 1,866 | \n Common stock repurchased | \n (18,420) | \n | \n (17,254) | \n | \n (22,245) | \n Common stock cash dividends paid | \n (24,082) | \n | \n (21,771) | \n | \n (19,800) | \n Other, net | \n (2,291) | \n | \n (1,309) | \n | \n (1,006) | \n Net cash used in financing \n\n accompanying notes are prepared in accordance with accounting principles generally accepted in the United States of America (\u201cGAAP\u201d).\n Principles of Consolidation \n The consolidated financial statements include the accounts of Microsoft Corporation and its subsidiaries. Intercompany transactions and balances have been eliminated.\n Recast of Certain Prior Period Information \n In August 2024, we announced changes to the composition of our segments. These changes align our segments with how we currently manage our business, most notably bringing the commercial components of Microsoft 365 together in the Productivity and Business Processes segment. Beginning in fiscal year 2025, the information that our chief operating decision maker is regularly provided and reviews for purposes of allocating resources and assessing performance reflects these segment changes. Prior period segment information has been recast to conform to the way we internally manage and monitor our business during fiscal year 2025. These changes primarily impacted Note 8 \u2013 Goodwill, Note 12 \u2013 Unearned Revenue, and Note 18 \u2013 Segment Information and Geographic Data.\n The recast of prior period information had no impact on our consolidated balance sheets, consolidated income statements, or consolidated cash flows statements.\n Estimates and Assumptions \n Preparing financial statements requires management to make estimates and assumptions that affect the reported amounts of assets, liabilities, revenue, and expenses. Examples of estimates and assumptions include: for revenue recognition, determining the nature and timing of satisfaction of performance obligations, and determining the standalone selling price (\u201cSSP\u201d) of performance obligations, variable consideration, and other obligations such as product retur\n\native liabilities | \n (1) | \n | \n (799) | \n | \n 0 | \n | \n (800) | \n Gains (losses) on derivative instruments recognized in other income (expense), net were as follows:\n (In millions) | \n Year Ended June 30, | \n | \n 2025 | \n | \n 2024 | \n | \n 2023 | \n Designated as Fair Value Hedging Instruments | \n Interest rate contracts | \n Derivatives | \n | \n $ 5 | \n | \n $ (23) | \n | \n $ (65) | \n Hedged items | \n | \n (45) | \n | \n (25) | \n | \n 38 | \n Designated as Cash Flow Hedging Instruments | \n Foreign exchange contracts | \n Amount reclassified from accumulated other comprehensive"
+    },
+    {
+      "title": "Microsoft Investor Relations - Annual Reports",
+      "url": "https://www.microsoft.com/en-us/investor/annual-reports",
+      "snippet": "Microsoft Investor Relations - Annual Reports . This is the Trace Id: 6ccaea96b048b414ac06c3b31c3e7229 .",
+      "kind": "retrieved page text (may be excerpted)",
+      "retrieved_at": "2026-09-08T21:02:47.130001+00:00",
+      "text": "Microsoft Investor Relations - Annual Reports \n This is the Trace Id: 32e7198ae4407d7c39188ff8e60f0f5e\n Skip to main content \n Investor Relations \n Press Release & Webcast \n Metrics \n Overview \n Overview \n Board of Directors \n Board Committees \n Policies and Guidelines \n Environment \n Overview \n Responsible AI \n Privacy & Cybersecurity \n Workplace & Culture \n Diversity & Inclusion \n Human Rights \n Responsible Sourcing \n ESG Reports Hub \n Awards & Recognition \n Annual Reports \n SEC Filings \n Information for Investors \n Annual Meeting \n Dividends & Stock History \n Investment History \n Acquisition History \n FAQ \n All Events \n Past Events \n Upcoming Events \n Contacts \n Microsoft 365 \n Azure \n Copilot \n Windows \n Surface \n XBOX \n Deals \n Small Business \n Support \n Windows Apps \n Outlook \n OneDrive \n Microsoft Teams \n OneNote \n Microsoft Edge \n Moving from Skype to Teams \n Computers \n Shop XBOX \n Accessories \n VR & mixed reality \n Certified Refurbished \n Trade-in for cash \n XBOX Game Pass Ultimate \n PC Game Pass \n XBOX games \n PC games \n Microsoft AI \n Microsoft Security \n Dynamics 365 \n Microsoft 365 for business \n Microsoft Power Platform \n Windows 365 \n Small Business \n Digital Sovereignty \n Azure \n Microsoft Developer \n Microsoft Learn \n Support for AI marketplace apps \n Microsoft Tech Community \n Microsoft Marketplace \n Software companies \n Visual Studio \n Microsoft Rewards \n Free downloads & security \n Education \n Gift cards \n Licensing \n Unlocked stories \n View Sitemap \n Annual Reports \n 2025 ANNUAL REPORT \n VIEW ONLINE DOWNLOAD NOW \n 2024 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2023 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2022 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2021 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2020 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2019 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2018 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2017 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2016 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2015 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2014 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2013 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2012 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2011 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2010 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2009 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2008 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2007 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2006 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2005 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2004 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2003 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2002 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2001 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 2000 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 1999 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 1998 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 1997 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \n 1996 Annual Report\n VIEW ONLINE \n DOWNLOAD NOW \nGo Green\n Shareholders may opt for the convenience of electronic shareholder materials. Subscribers receive messages containing links to the online annual report and proxy statement, and may vote their proxies onlin\n If you own stock through a broker, sign up here \n If you own stock directly, sign up here \n Microsoft Corp (MSFT) \n2025 ANNUAL REPORT \n VIEW ONLINE \n DOWNLOAD NOW \n Follow us\n Share this page\n Surface Pro \n Surface Laptop \n Surface Laptop Ultra \n Surface RTX Spark Dev Box \n Copilot for organizations \n Copilot for personal use \n Explore Microsoft products \n Windows 11 apps \n Account profile \n Download Center \n Microsoft Store support \n Returns \n Order tracking \n Certified Refurbished \n Microsoft Store Promise \n Flexible Payments \n Microsoft in education \n Devices for education \n Microsoft Teams for Education \n Microsoft 365 Education \n How to buy for your school \n Educator training and development \n Deals for students and parents \n AI for education \n Microsoft AI \n Microsoft Security \n Dynamics 365 \n Microsoft 365 \n Microsoft Power Platform \n Microsoft Teams \n Microsoft 365 Copilot \n Small Business \n Azure \n Microsoft Developer \n Microsoft Learn \n Support for AI marketplace apps \n Microsoft Tech Community \n Microsoft Marketplace \n Software companies \n Visual Studio \n Careers \n About Microsoft \n Company news \n Privacy at Microsoft \n Investors \n Diversity and inclusion \n Accessibility \n Sustainability \n English (United States) \n Your Privacy Choices Opt-Out Icon \n Your Privacy Choices \n Your Privacy Choices Opt-Out Icon \n Your Privacy Choices \n Consumer Health Privacy \n Sitemap \n Contact Microsoft \n Privacy \n Manage cookies \n Terms of use \n Trademarks \n Safety & eco \n Recycling \n About our ads"
+    },
+    {
+      "title": "0000950170-25-100235 | 10-K | Microsoft Corporation",
+      "url": "https://microsoft.gcs-web.com/sec-filings/sec-filing/10-k/0000950170-25-100235",
+      "snippet": "Jun 30, 2025 \u00b7 Form Description Annual report which provides a comprehensive overview of the company for the past year Filing Group Annual Filings Company Microsoft Corporation Issuer",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:47.130005+00:00"
+    },
+    {
+      "title": "Form 10-K for Microsoft Corp filed 07/30/2025",
+      "url": "https://microsoft.gcs-web.com/static-files/9640e86d-a99f-4502-934d-1d3c883fa786",
+      "snippet": "Our annual report on Form 10 - K , quarterly reports on Form 10-Q, current reports on Form 8- K , and any amendments to those reports, as soon as reasonably practicable after we electronically file that material with or furnish it to the Securities and Exchange Commission (\u201cSEC\u201d) at www.sec.gov.",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:47.130008+00:00"
+    },
+    {
+      "title": "Microsoft Corporation (MSFT) Annual Financial Report \u2014 FY2025",
+      "url": "https://readbiz.app/report?ticker=MSFT&period=annual",
+      "snippet": "This page presents Microsoft Corporation (\u5fae\u8f6f) SEC EDGAR 10 - K financial data. Bilingual explanations, click any term for plain-English definitions, automated health checks, quarterly trends.",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:47.130012+00:00"
+    },
+    {
+      "title": "EDGAR Filing Documents for 0000950170-25-100235 - SEC.gov",
+      "url": "https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/0000950170-25-100235-index.htm",
+      "snippet": "Jun 30, 2025 \u00b7 Business Address ONE MICROSOFT WAYREDMOND WA98052-6399 425-882-8080 MICROSOFT CORP (Filer) CIK: 0000789019 (see all company filings) EIN.: 911144442| State of Incorp.: WA| Fiscal Year End: 0630 Type: 10 - K | Act: 34| File No.: 001-37845| Film No.: 251167157 SIC: 7372Services-Prepackaged Software",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:02:47.130015+00:00"
+    },
+    {
+      "title": "\u77e5\u4e4e - \u6709\u95ee\u9898\uff0c\u5c31\u4f1a\u6709\u7b54\u6848",
+      "url": "https://www.zhihu.com/",
+      "snippet": "\u77e5\u4e4e\uff0c\u4e2d\u6587\u4e92\u8054\u7f51\u9ad8\u8d28\u91cf\u7684\u95ee\u7b54\u793e\u533a\u548c\u521b\u4f5c\u8005\u805a\u96c6\u7684\u539f\u521b\u5185\u5bb9\u5e73\u53f0\uff0c\u4e8e 2011 \u5e74 1 \u6708\u6b63\u5f0f\u4e0a\u7ebf\uff0c\u4ee5\u300c\u8ba9\u4eba\u4eec\u66f4\u597d\u7684\u5206\u4eab\u77e5\u8bc6\u3001\u7ecf\u9a8c\u548c\u89c1 \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:11.827860+00:00"
+    },
+    {
+      "title": "Newest Questions - Stack Overflow",
+      "url": "https://stackoverflow.com/",
+      "snippet": "21 hours ago \u00a0\u00b7 Stack Overflow | The World\u2019s Largest Online Community for Developers",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:11.827891+00:00"
+    },
+    {
+      "title": "Can't connect to Flask web service, connection refused",
+      "url": "https://stackoverflow.com/questions/30554702/cant-connect-to-flask-web-service-connection-refused",
+      "snippet": "May 31, 2015 \u00a0\u00b7 127.0.0.1 is the localhost address and will only be reachable from the raspi. In order to get access from your laptop \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:11.827897+00:00"
+    },
+    {
+      "title": "\u5927\u5bb6\u90fd\u662f\u5982\u4f55\u627e\u5230\u5916\u4f01\u7684\u5de5\u4f5c\uff1f - \u77e5\u4e4e",
+      "url": "https://www.zhihu.com/question/377904767",
+      "snippet": "1\uff0c\u5fc5\u987b\u662f\u6b27\u4f01\uff0c\u5982\u679c\u662f\u5317\u6b27\u4f01\u4e1a\u4f1a\u66f4\u597d\u3002 \u5c3d\u91cf\u4e0d\u8981\u65e5\u97e9\u4f01\u4e1a\u3002 \u89e3\u91ca\uff1a\u5317\u6b27\u4f01\u4e1a\u7684\u798f\u5229\u662f\u6700\u597d\u7684\uff0c\u7136\u540e\u5230\u6b27\u6d32\u3002 \u65e5\u97e9\u548c\u4e1c\u5357\u4e9a\u4f01\u4e1a\u7684 \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:11.827903+00:00"
+    },
+    {
+      "title": "Diferen\u00e7a no uso da '/' e '\\\\' ao definir um caminho no diret\u00f3rio",
+      "url": "https://pt.stackoverflow.com/questions/532243/diferen%C3%A7a-no-uso-da-e-ao-definir-um-caminho-no-diret%C3%B3rio",
+      "snippet": "Oct 27, 2021 \u00a0\u00b7 Eu estava montando um c\u00f3digo que se utiliza de leitura e escrita de arquivos (.txt e .csv) em Python e ao copiar o \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:11.827908+00:00"
+    },
+    {
+      "title": "Where is LinkedIn Symbol on Word? - Answers",
+      "url": "https://www.answers.com/natural-sciences/Where_is_LinkedIn_Symbol_on_Word",
+      "snippet": "Aug 7, 2025 \u00a0\u00b7 LinkedIn is a professional networking platform that connects users for career development and job opportunities. What \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:11.827915+00:00"
+    },
+    {
+      "title": "Breaking Bad (TV Series 2008\u20132013) - IMDb",
+      "url": "https://www.imdb.com/title/tt0903747/",
+      "snippet": "Breaking Bad: Created by Vince Gilligan. With Bryan Cranston, Aaron Paul, Anna Gunn, Dean Norris. A chemistry teacher \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.182270+00:00"
+    },
+    {
+      "title": "Breaking Bad (TV Series 2008\u20132013) - Episode list - IMDb",
+      "url": "https://www.imdb.com/title/tt0903747/episodes/",
+      "snippet": "After receiving a devastating diagnosis, a struggling high school chemistry teacher partners with a former student to produce \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.182299+00:00"
+    },
+    {
+      "title": "Breaking Bad (TV Series 2008\u20132013) - Full cast & crew - IMDb",
+      "url": "https://www.imdb.com/title/tt0903747/fullcredits/",
+      "snippet": "Breaking Bad (TV Series 2008\u20132013) - Cast and crew credits, including actors, actresses, directors, writers and more.",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.182306+00:00"
+    },
+    {
+      "title": "Breaking Bad: Original Minisodes (TV Series 2009\u20132011) - IMDb",
+      "url": "https://www.imdb.com/title/tt2387761/",
+      "snippet": "Breaking Bad: Original Minisodes: Created by Vince Gilligan. With Bob Odenkirk, Matt Jones, Aaron Paul, Bryan Cranston. A side \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.182310+00:00"
+    },
+    {
+      "title": "Breaking Bad (TV Series 2008\u20132013) - Ratings - IMDb",
+      "url": "https://www.imdb.com/title/tt0903747/ratings/",
+      "snippet": "IMDbPro All topics Ratings Breaking Bad IMDb rating The IMDb rating is weighted to help keep it reliable. Learn more IMDb RATING",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.182315+00:00"
+    },
+    {
+      "title": "Breaking Bad (Serie de TV 2008\u20132013) - IMDb",
+      "url": "https://www.imdb.com/es/title/tt0903747/",
+      "snippet": "Breaking Bad: Creado por Vince Gilligan. Con Bryan Cranston, Aaron Paul, Anna Gunn, Dean Norris. Un profesor de secundaria \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.182320+00:00"
+    },
+    {
+      "title": "\u53d1\u73b0 - \u77e5\u4e4e",
+      "url": "https://www.zhihu.com/explore",
+      "snippet": "\u91ce\u8349\u541b\uff1a\u6700\u8fd1CZ\u7684\u4e66\u300a\u5e01\u5b89\u4eba\u751f\u300b\u53d1\u8868\u4e86,\u91cc\u9762\u6709\u53e5\u8bdd\u6211\u89c9\u5f97\u6bd4\u8f83\u5951\u5408\u8fd9\u4e2a\u95ee\u9898. \u98ce\u9669\u7684\u771f\u8c1b\u662f\u98ce\u9669\u56e0\u4eba\u800c\u5f02. \u4e8b\u4ef6\u672c\u8eab\u7684\u98ce\u9669\u6982\u7387 \ufe0f \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.566208+00:00"
+    },
+    {
+      "title": "\u7535\u5bb9\u7684\u5355\u4f4d\u600e\u4e48\u6362\u7b97\uff1fF\uff0cNF\uff0cPF\uff0cUF\uff1f_\u767e\u5ea6\u77e5\u9053",
+      "url": "https://zhidao.baidu.com/question/12936434.html",
+      "snippet": "\u5f531\u6cd5\u62c9\u7684\u7535\u5bb9\u5668\u4e0a\u7684\u7535\u538b\u4ee51\u4f0f\u7279\u6bcf\u79d2\uff081 V/s\uff09\u7684\u901f\u5ea6\u53d8\u5316\u65f6\uff0c\u5c31\u4f1a\u4ea7\u751f1\u5b89\u57f9\u7684\u7535\u6d41\u3002 1\u6cd5\u62c9\u7684\u7535\u5bb9\u4e0a\u5982\u679c\u5e26\u67091\u5e93\u4f26\uff081C\uff09\u7684\u7535\u8377 \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.566238+00:00"
+    },
+    {
+      "title": "\u5408\u4f19\u4eba\u5165\u9a7b\u5e73\u53f0_\u767e\u5ea6\u77e5\u9053",
+      "url": "https://zhidao.baidu.com/home/partnerhome",
+      "snippet": "\u77e5\u8bc6\u5206\u4eab\uff0c\u4ef7\u503c\u5171\u521b\uff01\u767e\u5ea6\u77e5\u9053\u5408\u4f19\u4eba\u5e73\u53f0\uff0c\u662f\u57fa\u4e8e\u77e5\u8bc6\u5185\u5bb9\u7684\u521b\u4f5c\u5206\u53d1\u5e73\u53f0\u3002\u4e00\u7ad9\u5f0f\u751f\u4ea7\uff0c\u5168\u6e20\u9053\u5206\u53d1\uff1b\u4ebf\u4e07\u7cbe\u51c6\u6d41\u91cf\uff0cAI\u4e3a\u521b\u4f5c \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.566244+00:00"
+    },
+    {
+      "title": "\u6709\u4ec0\u4e48\u597d\u7684ed2k\u4e0b\u8f7d\u5668\uff1f - \u77e5\u4e4e",
+      "url": "https://www.zhihu.com/question/63863543",
+      "snippet": "\u77e5\u4e4e\uff0c\u4e2d\u6587\u4e92\u8054\u7f51\u9ad8\u8d28\u91cf\u7684\u95ee\u7b54\u793e\u533a\u548c\u521b\u4f5c\u8005\u805a\u96c6\u7684\u539f\u521b\u5185\u5bb9\u5e73\u53f0\uff0c\u4e8e 2011 \u5e74 1 \u6708\u6b63\u5f0f\u4e0a\u7ebf\uff0c\u4ee5\u300c\u8ba9\u4eba\u4eec\u66f4\u597d\u7684\u5206\u4eab\u77e5\u8bc6\u3001\u7ecf\u9a8c\u548c\u89c1 \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.566249+00:00"
+    },
+    {
+      "title": "spring\u6574\u5408redis\u8001\u662f\u62a5\u8d85\u65f6\u5f02\u5e38Command timed out after 5 second(s) \u2026",
+      "url": "https://bbs.csdn.net/topics/392503095",
+      "snippet": "Dec 31, 2018 \u00a0\u00b7 \u4ee5\u4e0b\u5185\u5bb9\u662fCSDN\u793e\u533a\u5173\u4e8espring\u6574\u5408redis\u8001\u662f\u62a5\u8d85\u65f6\u5f02\u5e38Command timed out after 5 second(s)\u76f8\u5173\u5185\u5bb9\uff0c\u5982\u679c\u60f3\u4e86 \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.566255+00:00"
+    },
+    {
+      "title": "\u62fc\u591a\u591a\u624b\u673a\u7248\u7f51\u5740 \u62fc\u591a\u591a\u7f51\u9875\u7248\u514d\u767b\u5f55\u6d4f\u89c8_\u767e\u5ea6\u77e5\u9053",
+      "url": "https://zhidao.baidu.com/question/1832603278098485988.html",
+      "snippet": "Nov 11, 2025 \u00a0\u00b7 \u65e0\u5f3a\u5236\u767b\u5f55\uff1a\u8fdb\u5165\u7f51\u7ad9\u540e\u65e0\u9700\u6ce8\u518c\u8d26\u53f7\u6216\u901a\u8fc7\u5fae\u4fe1\u3001QQ\u7b49\u7b2c\u4e09\u65b9\u5e73\u53f0\u6388\u6743\u767b\u5f55\uff0c\u53ef\u76f4\u63a5\u6d4f\u89c8\u5546\u54c1\u3002 \u5168\u529f\u80fd\u5f00\u653e\uff1a\u6240\u6709 \u2026",
+      "kind": "search snippet",
+      "retrieved_at": "2026-09-08T21:03:12.566261+00:00"
+    }
+  ],
+  "warnings": [
+    "Could not read https://www.sec.gov/Archives/edgar/data/789019/000095017025100235/0000950170-25-100235-index.htm: HTTP Error 403: Forbidden",
+    "Could not read https://microsoft.gcs-web.com/static-files/9640e86d-a99f-4502-934d-1d3c883fa786: The read operation timed out",
+    "Could not read https://microsoft.gcs-web.com/sec-filings/sec-filing/10-k/0000950170-25-100235: The read operation timed out"
+  ],
+  "metrics": {
+    "prompt_tokens": 13628,
+    "completion_tokens": 766,
+    "total_tokens": 14394,
+    "model_ms": 30246.565,
+    "total_ms": 49603.4,
+    "page_requests": 9,
+    "pages_fetched": 6,
+    "model_calls": 3,
+    "model_attempts": 3,
+    "usage_complete": true,
+    "web_requests": 6,
+    "source_count": 33
+  }
+}
