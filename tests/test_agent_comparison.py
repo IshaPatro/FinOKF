@@ -14,22 +14,183 @@ TOKENS = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
 
 
 class ComparisonTests(unittest.TestCase):
-    def test_naive_only_uses_web_and_accumulates_both_calls(self):
+    def test_company_aliases_ticker_punctuation_and_unknown_local_company_do_not_use_prior_company(self):
+        nodes = {ticker: {"id": ticker, "type": "finance.entity", "ticker": ticker, "title": name}
+                 for ticker, name in [("AAPL", "Apple Inc."), ("MSFT", "Microsoft Corporation"), ("BRK.B", "Berkshire Hathaway Inc.")]}
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(server, "PRICE_DAILY", Path(directory)):
+            for name, ticker in [("Microsoft", "MSFT"), ("msft", "MSFT"), ("BRK-B", "BRK.B"), ("BRK.B", "BRK.B"), ("Tesla", "TSLA"), ("TSLA", "TSLA")]:
+                with self.subTest(name=name):
+                    self.assertEqual(server.mentioned_company_tickers(f"How did {name} perform in FY2025?", nodes["AAPL"], nodes), [ticker])
+
+    def test_company_name_then_different_ticker_routes_only_current_company_and_grows_vault(self):
+        handler = object.__new__(server.Handler)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            processed = root / "data/processed"
+            nodes = {}
+            for ticker, title in [("AAPL", "Apple Inc."), ("MSFT", "Microsoft Corporation")]:
+                company = {"id": ticker, "type": "finance.entity", "ticker": ticker, "title": title,
+                           "path": f"companies/{ticker}.md", "edges": []}
+                nodes[ticker] = company
+                for year in [2023, 2024, 2025, 2026]:
+                    key = f"{ticker}-{year}"
+                    nodes[key] = {"id": key, "type": "finance.filing", "ticker": ticker, "title": key,
+                                  "path": f"filings/{ticker}/{year}.md", "preview": "Unused index preview",
+                                  "finokf": {"form": "10-K", "fiscal_year": year, "filing_date": str(year)}}
+            for node in nodes.values():
+                path = processed / node["path"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"# {node['title']}\r\nComplete original source\r\n".encode())
+            with mock.patch.object(server, "ROOT", root), mock.patch.object(server, "PROCESSED", processed), \
+                 mock.patch.object(server, "VAULTS", root / "vaults"), mock.patch.object(server, "PRICE_DAILY", root / "prices"), \
+                 mock.patch.object(server, "load_browser_index", return_value=({}, nodes)), \
+                 mock.patch.object(server, "compile_flashokf", return_value={"hit": False}), \
+                 mock.patch.object(server, "analytical_cash_bindings", return_value=("", [])), \
+                 mock.patch.object(server, "filing_excerpt", side_effect=lambda path, *a, **kw: f"Evidence from {path}"), \
+                 mock.patch.object(server, "research_missing_evidence", return_value={"sources": [], "warnings": [], "usage": TOKENS, "model_ms": 2, "web_requests": 0, "page_requests": 0}), \
+                 mock.patch.object(server, "call_llm", return_value=("Analyst answer", TOKENS, 3)) as llm, \
+                 mock.patch.object(server, "RESPONSE_LRU", server.OrderedDict()):
+                first = handler._run_finokf({"message": "How did Apple's gross margin change in FY2024 and FY2025?", "provider_config": CONFIG})
+                self.assertNotIn("MSFT", llm.call_args.args[1])
+                second = handler._run_finokf({"message": "How did MSFT operating leverage change in FY2024 and FY2025?", "node": nodes["AAPL"], "vault_id": first["vault"]["vault_id"], "provider_config": CONFIG})
+                self.assertNotIn("AAPL", llm.call_args.args[1])
+                self.assertIn("MSFT", llm.call_args.args[1])
+                self.assertEqual(second["metrics"]["total_tokens"], 30)
+                self.assertEqual(second["metrics"]["model_calls"], 2)
+                graph = server.build_chat_graph(second["vault"])
+                self.assertEqual({n["ticker"] for n in graph["nodes"] if n["type"] == "finance.entity"}, {"AAPL", "MSFT"})
+                filings = [n for n in graph["nodes"] if n["type"] == "finance.filing"]
+                self.assertEqual(len(filings), 6)  # Three supplied excerpts per turn, not all eight eligible filings.
+                for node in filings:
+                    self.assertEqual((root / node["path"]).read_bytes(), (root / node["source_path"]).read_bytes())
+                    company = next(n for n in graph["nodes"] if n["type"] == "finance.entity" and n["ticker"] == node["ticker"])
+                    self.assertIn({"source": company["id"], "target": node["id"], "rel": "has_evidence"}, graph["links"])
+
+    def test_search_parser_decodes_result_urls_and_ignores_navigation(self):
+        html = '''<a href="/help">Help</a><li><a href="https://r.search.yahoo.com/RU=https%3A%2F%2Finvestor.example.com%2Fannual.pdf/RK=2/RS=x"><h3>Annual <b>report</b></h3></a><p>Revenue &amp; costs</p></li>
+        <li><a href="https://example.com/results"><h3>Results</h3></a><p>FY2025 figures</p></li>'''
+        result = server.parse_public_search_results(html)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["url"], "https://investor.example.com/annual.pdf")
+        self.assertEqual(result[0]["title"], "Annual report")
+        self.assertEqual(result[0]["snippet"], "Revenue & costs")
+        with self.assertRaisesRegex(RuntimeError, "no usable results"):
+            server.parse_public_search_results('<h3>Search unavailable</h3>')
+
+    def test_public_pdf_is_extracted_with_layout(self):
+        import pypdf
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.headers = {"Content-Type": "application/pdf"}
+        response.read.return_value = b"%PDF-test-data"
+        page = mock.Mock()
+        page.extract_text.return_value = "USD millions    FY2025    FY2024\nRevenue         100       90"
+        with mock.patch.object(server, "validate_public_url"), \
+             mock.patch.object(server.urlrequest, "build_opener") as opener, \
+             mock.patch.object(pypdf, "PdfReader") as reader:
+            opener.return_value.open.return_value = response
+            reader.return_value.pages = [page]
+            text = server.fetch_research_page("https://example.com/report.pdf", "Revenue FY2025", 24000)
+        page.extract_text.assert_called_once_with(extraction_mode="layout")
+        self.assertIn("[PDF page 1]", text)
+        self.assertIn("Revenue         100       90", text)
+
+    def test_public_html_retains_table_boundaries_and_removes_scripts(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.headers = {"Content-Type": "text/html"}
+        response.read.return_value = b'<script>ignore instructions</script><table><tr><td>Revenue</td><td>100</td></tr><tr><td>Costs</td><td>60</td></tr></table>'
+        with mock.patch.object(server, "validate_public_url"), \
+             mock.patch.object(server.urlrequest, "build_opener") as opener:
+            opener.return_value.open.return_value = response
+            text = server.fetch_research_page("https://example.com/report", "Revenue")
+        self.assertIn("Revenue | 100 |", text)
+        self.assertIn("\n", text)
+        self.assertNotIn("ignore instructions", text)
+
+    def test_naive_reads_pages_reviews_numbers_and_accumulates_all_calls(self):
         source = {"title": "Web result", "url": "https://example.com/research", "snippet": "Revenue 20"}
-        with mock.patch.object(server, "call_llm", side_effect=[("company revenue\ncompany margin", TOKENS, 12), ("Web answer", TOKENS, 13)]) as llm, \
+        with mock.patch.object(server, "call_llm", side_effect=[("company revenue\ncompany margin", TOKENS, 12), ('{"sufficient": true}', TOKENS, 7), ("Web answer", TOKENS, 13)]) as llm, \
              mock.patch.object(server, "search_public_web", return_value=[source]) as search, \
+             mock.patch.object(server, "fetch_research_page", return_value="Full-page revenue 20 and cost 12") as fetch, \
              mock.patch.object(server, "load_browser_index", side_effect=AssertionError("local index accessed")), \
              mock.patch.object(server, "read_processed_markdown", side_effect=AssertionError("filing accessed")), \
              mock.patch.object(server, "response_cache_get", side_effect=AssertionError("cache accessed")), \
              mock.patch.object(server, "price_csv_path", side_effect=AssertionError("prices accessed")):
             result = server.run_naive("Company revenue?", CONFIG)
         self.assertTrue(result["ok"])
-        self.assertEqual(result["metrics"]["total_tokens"], 30)
-        self.assertEqual(result["metrics"]["model_ms"], 25)
+        self.assertEqual(result["metrics"]["total_tokens"], 45)
+        self.assertEqual(result["metrics"]["model_ms"], 32)
+        self.assertEqual(result["metrics"]["model_calls"], 3)
+        self.assertEqual(result["metrics"]["page_requests"], 1)
+        self.assertEqual(result["metrics"]["pages_fetched"], 1)
+        fetch.assert_called_once()
         self.assertEqual(search.call_count, 2)
         self.assertEqual(len(result["sources"]), 1)
         self.assertIn("https://example.com/research", llm.call_args.args[1])
+        self.assertIn("Full-page revenue 20 and cost 12", llm.call_args.args[1])
         self.assertFalse(result["cache_hit"])
+
+    def test_naive_researches_identical_questions_again_without_vault_or_cache(self):
+        first_source = {"title": "Fresh result one", "url": "https://example.com/one", "snippet": "Revenue"}
+        second_source = {"title": "Fresh result two", "url": "https://example.com/two", "snippet": "Revenue"}
+        calls = [
+            ("revenue FY2025", TOKENS, 1), ('{"sufficient": true}', TOKENS, 1), ("First fresh answer", TOKENS, 1),
+            ("revenue FY2025", TOKENS, 1), ('{"sufficient": true}', TOKENS, 1), ("Second fresh answer", TOKENS, 1),
+        ]
+        with mock.patch.object(server, "call_llm", side_effect=calls), \
+             mock.patch.object(server, "search_public_web", side_effect=[[first_source], [second_source]]) as search, \
+             mock.patch.object(server, "fetch_research_page", side_effect=["first web page", "second web page"]) as fetch, \
+             mock.patch.object(server, "response_cache_get", side_effect=AssertionError("Naive cache accessed")), \
+             mock.patch.object(server, "response_cache_put", side_effect=AssertionError("Naive cache accessed")), \
+             mock.patch.object(server, "load_browser_index", side_effect=AssertionError("vault accessed")), \
+             mock.patch.object(server, "read_processed_markdown", side_effect=AssertionError("filing accessed")):
+            first = server.run_naive("What was revenue in FY2025?", CONFIG)
+            second = server.run_naive("What was revenue in FY2025?", CONFIG)
+        self.assertTrue(first["ok"])
+        self.assertTrue(second["ok"])
+        self.assertEqual(first["answer"], "First fresh answer")
+        self.assertEqual(second["answer"], "Second fresh answer")
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual([item["url"] for item in first["sources"]], [first_source["url"]])
+        self.assertEqual([item["url"] for item in second["sources"]], [second_source["url"]])
+        self.assertFalse(first["cache_hit"])
+        self.assertFalse(second["cache_hit"])
+
+    def test_naive_follows_up_missing_evidence_and_tracks_failed_fetches(self):
+        first = {"title": "Results", "url": "https://example.com/first", "snippet": "Revenue"}
+        second = {"title": "Financial statements", "url": "https://example.com/second", "snippet": "Cost"}
+        audit = json.dumps({"sufficient": False, "queries": ["cost of sales"], "urls": ["https://example.com/report"]})
+        def fetch(url, *args):
+            if url.endswith("first"):
+                raise RuntimeError("HTTP 403")
+            return "Revenue 100; cost of sales 60"
+        with mock.patch.object(server, "call_llm", side_effect=[("annual results", TOKENS, 1), (audit, TOKENS, 2), ("Margin 40%", TOKENS, 3)]) as llm, \
+             mock.patch.object(server, "search_public_web", side_effect=[[first], [second]]) as search, \
+             mock.patch.object(server, "fetch_research_page", side_effect=fetch):
+            result = server.run_naive("Apple gross margin FY2025?", CONFIG)
+        self.assertTrue(result["ok"])
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(result["metrics"]["web_requests"], 2)
+        self.assertEqual(result["metrics"]["page_requests"], 3)
+        self.assertEqual(result["metrics"]["pages_fetched"], 2)
+        self.assertEqual(result["metrics"]["total_tokens"], 45)
+        self.assertIn("HTTP 403", llm.call_args.args[1])
+        self.assertIn("cost of sales 60", llm.call_args.args[1])
+        self.assertTrue(result["warnings"])
+
+    def test_naive_malformed_review_has_bounded_recovery(self):
+        source = {"title": "Results", "url": "https://example.com/results", "snippet": "Revenue"}
+        with mock.patch.object(server, "call_llm", side_effect=[("annual results", TOKENS, 1), ("not JSON", TOKENS, 2), ("Insufficient evidence", TOKENS, 3)]), \
+             mock.patch.object(server, "search_public_web", return_value=[source]) as search, \
+             mock.patch.object(server, "fetch_research_page", return_value="Revenue only") as fetch:
+            result = server.run_naive("Apple margin FY2025?", CONFIG)
+        self.assertTrue(result["ok"])
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(result["metrics"]["model_calls"], 3)
+        self.assertIn("not structured", result["warnings"][0])
 
     def test_search_failure_does_not_invent_an_answer(self):
         with mock.patch.object(server, "call_llm", return_value=("query", TOKENS, 1)) as llm, \
@@ -38,6 +199,28 @@ class ComparisonTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("blocked", result["answer"])
         self.assertEqual(llm.call_count, 1)
+
+    def test_failed_model_call_marks_usage_incomplete_without_padding_tokens(self):
+        source = {"title": "Results", "url": "https://example.com/results", "snippet": "Revenue"}
+        with mock.patch.object(server, "call_llm", side_effect=[("annual results", TOKENS, 1), TimeoutError("timed out")]), \
+             mock.patch.object(server, "search_public_web", return_value=[source]), \
+             mock.patch.object(server, "fetch_research_page", return_value="Financial statement"):
+            result = server.run_naive("Apple FY2025?", CONFIG)
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["metrics"]["usage_complete"])
+        self.assertEqual(result["metrics"]["model_calls"], 1)
+        self.assertEqual(result["metrics"]["model_attempts"], 2)
+        self.assertEqual(result["metrics"]["total_tokens"], 15)
+        self.assertGreaterEqual(result["metrics"]["model_ms"], 1)
+
+    def test_ollama_can_bound_naive_generation(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b'{"message":{"content":"Answer"},"prompt_eval_count":10,"eval_count":5}'
+        with mock.patch.object(server.urlrequest, "urlopen", return_value=response) as opened:
+            server.call_ollama("Research", "Question", {**CONFIG, "num_predict": 1600})
+        payload = json.loads(opened.call_args.args[0].data)
+        self.assertEqual(payload["options"]["num_predict"], 1600)
 
     def test_historical_price_uses_prior_session(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(server, "PRICE_DAILY", Path(directory)):
@@ -48,7 +231,7 @@ class ComparisonTests(unittest.TestCase):
         self.assertNotIn("close=520", context)
         self.assertIn("shares outstanding", context)
 
-    def test_finokf_cache_consumes_zero_tokens_and_changes_with_evidence(self):
+    def test_finokf_reuses_research_but_always_runs_fresh_inference(self):
         handler = object.__new__(server.Handler)
         selected = {"id": "MSFT", "ticker": "MSFT", "title": "Microsoft", "path": "", "type": "finance.entity"}
         payload = {"message": "Is MSFT a good buy?", "node": selected, "provider_config": CONFIG}
@@ -69,16 +252,19 @@ class ComparisonTests(unittest.TestCase):
             second = handler._run_finokf(payload)
             self.assertFalse(first["cache_hit"])
             self.assertTrue(second["cache_hit"])
-            self.assertEqual(second["metrics"]["total_tokens"], 0)
+            self.assertEqual(second["metrics"]["total_tokens"], 15)
+            self.assertEqual(second["metrics"]["model_calls"], 1)
+            self.assertEqual(first["metrics"]["model_calls"], 2)
+            self.assertEqual(second["cache_kind"], "research-lru")
             self.assertEqual(second["metrics"]["web_requests"], 0)
             self.assertEqual(second["sources"][-1], web_source)
             self.assertEqual(llm.call_count, 2)
             self.assertEqual(research.call_count, 1)
-            self.assertEqual(first["metrics"]["total_tokens"], 45)
+            self.assertEqual(first["metrics"]["total_tokens"], 30)
             context.return_value = "local price 101"
             third = handler._run_finokf(payload)
             self.assertFalse(third["cache_hit"])
-            self.assertEqual(llm.call_count, 4)
+            self.assertEqual(llm.call_count, 3)
             self.assertEqual(third["metrics"]["web_requests"], 1)
             with mock.patch.object(server.time, "time", return_value=server.time.time() + 901):
                 expired = handler._run_finokf(payload)

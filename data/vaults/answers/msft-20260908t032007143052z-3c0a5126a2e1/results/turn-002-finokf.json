@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "agent": "finokf",
+  "data_access": "Local filings and prices first; web research for missing evidence",
+  "warnings": [],
+  "sources": [
+    "filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+  ],
+  "source_files": [
+    {
+      "title": "MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "path": "data/vaults/answers/msft-20260908t032007143052z-3c0a5126a2e1/documents/112284a11d2a-16511187777c7194/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md",
+      "source_path": "data/processed/filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md"
+    }
+  ],
+  "model": "llama3.2:3b",
+  "provider": "ollama",
+  "answer": "**Conclusion:** Microsoft's consolidated operating margin has increased across FY2023, FY2024, and FY2025, with a notable acceleration in FY2024. The incremental operating margin has decreased from 62.97% in FY2023 to 52.17% in FY2024 and 45.62% in FY2025.\n\n**Drivers:** The increase in operating margin can be attributed to several factors, including:\n\n* Revenue growth: Revenue has increased by 13.6% and 16.5% in FY2024 and FY2025, respectively, driven by the company's expanding cloud and productivity businesses.\n* Cost management: Microsoft has made significant investments in cost reduction initiatives, including the elimination of 10,000 jobs in FY2022 and FY2023.\n* Operating efficiency: The company has improved its operating efficiency, with a decrease in operating expenses as a percentage of revenue.\n\n**Quantitative Comparison:**\n\n| Fiscal Year | Revenue Growth | Operating Income Growth | Incremental Operating Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 | 0% | 41.77% | 62.97% |\n| FY2024 | 13.6% | 44.64% | 52.17% |\n| FY2025 | 16.5% | 45.62% | 45.62% |\n\n**Limitations:** The analysis is based on reported-period calculations and does not establish the cause or future persistence of the change in operating margin. Additionally, the incremental operating margin calculation does not account for changes in working capital or noncash charges.\n\n**Table:**\n\n| Fiscal Year | Revenue (USD millions) | Operating Income (USD millions) | Operating Margin |\n| --- | ---: | ---: | ---: |\n| FY2023 | 211,915.000 | 88,523.000 | 41.77% |\n| FY2024 | 245,122.000 | 109,433.000 | 44.64% |\n| FY2025 | 281,724.000 | 128,528.000 | 45.62% |\n\n**Sources:**\n\n* `filings/MSFT/MSFT-FY2025-10-K-2025-07-30-0000950170-25-100235.md`\n* Microsoft's annual reports and filings.",
+  "method": "auto",
+  "route": "ollama-measured-synthesis",
+  "cache_hit": true,
+  "cache_kind": "calculation-lru",
+  "metrics": {
+    "total_ms": 8712.464,
+    "route_ms": 0.011,
+    "bind_ms": 10.35,
+    "model_ms": 6873.245,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "llm_cache_hit": false,
+    "evidence_cache_hit": true,
+    "web_requests": 0,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "prompt_tokens": 915,
+    "completion_tokens": 493,
+    "total_tokens": 1408,
+    "ollama_total_ms": 6854.219,
+    "ollama_load_ms": 1.466,
+    "persist_ms": 1751.179,
+    "source_count": 1,
+    "local_ms": 1839.219
+  }
+}

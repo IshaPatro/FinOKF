@@ -53,6 +53,16 @@ SCALE_PATTERNS = (
     ),
     re.compile(rf"\(\s*\$?\s*({SCALE_WORD_PATTERN})\s*\)", re.IGNORECASE),
 )
+UNITS_ROW_CELL_RE = re.compile(
+    rf"^\(?\s*(?:(?:amounts?|dollars?|shares?)\s+)?in\s+(?:{SCALE_WORD_PATTERN})"
+    rf"(?:\s+of\s+(?:dollars?|shares?))?(?:\s*,?\s*except\b.+)?\s*\)?$",
+    re.IGNORECASE,
+)
+UNITS_EXCEPTION_CLAUSE_RE = re.compile(
+    rf"\(?\s*(?:(?:amounts?|dollars?|shares?)\s+)?in\s+(?:{SCALE_WORD_PATTERN})"
+    rf"(?:\s+of\s+(?:dollars?|shares?))?\s*,?\s*except\b[^)]*(?:\)|$)",
+    re.IGNORECASE,
+)
 ZERO_THOUSANDS_RE = re.compile(r"\(\s*0{3}(?:['’]?s)?\s*\)", re.IGNORECASE)
 SHARE_SCALE_PATTERNS = (
     re.compile(
@@ -304,6 +314,23 @@ def normalize_data_row(cells: list[str]) -> tuple[list[str], int, int]:
     return row, converted_negatives, moved_currency
 
 
+def propagate_units_row(cells: list[str]) -> list[str]:
+    """Copy a lone units declaration across empty value columns in its row."""
+    row = [clean_cell(cell) for cell in cells]
+    populated = [(column, value) for column, value in enumerate(row) if value]
+    if not populated or any(not UNITS_ROW_CELL_RE.fullmatch(plain_text(value)) for _, value in populated):
+        return row
+
+    declarations = {plain_text(value).casefold() for _, value in populated}
+    if len(declarations) != 1:
+        return row
+    source = populated[0][1]
+    for column in range(1, len(row)):
+        if not row[column]:
+            row[column] = source
+    return row
+
+
 def repair_table_structure(lines: list[str]) -> TableResult:
     try:
         rows = [split_row(line) for line in lines]
@@ -318,6 +345,10 @@ def repair_table_structure(lines: list[str]) -> TableResult:
     delimiter_indexes = [index for index, row in enumerate(rows) if is_delimiter_row(row)]
     if delimiter_indexes != [1]:
         return TableResult(lines, False, reason="missing or nonstandard delimiter row")
+
+    # Propagate table-wide unit declarations before any structural or token
+    # normalization so every value column retains the same measurement context.
+    rows = [propagate_units_row(row) if index != 1 else row for index, row in enumerate(rows)]
 
     header, header_converted, header_currency = normalize_data_row(rows[0])
     normalized_data: list[list[str]] = []
@@ -519,7 +550,9 @@ def choose_scale(
     if CHANGE_COLUMN_RE.search(plain_text(column_semantic)):
         return None
 
-    semantic = f"{row_semantic} {column_semantic}"
+    column_scale = extract_scale(column_semantic)
+    semantic_column = UNITS_EXCEPTION_CLAUSE_RE.sub("", plain_text(column_semantic))
+    semantic = f"{row_semantic} {semantic_column}"
     share_count = bool(SHARE_COUNT_RE.search(semantic))
     exception_semantic = PER_SHARE_RE.sub("", semantic) if share_count else semantic
     if semantic_exception(exception_semantic, policy.exceptions):
@@ -528,7 +561,6 @@ def choose_scale(
     row_scale = extract_scale(row_semantic)
     if row_scale:
         return row_scale
-    column_scale = extract_scale(column_semantic)
     if column_scale:
         return column_scale
 

@@ -32,6 +32,13 @@ function fixture(id, ticker) {
   };
 }
 
+test("question, run and answer nodes render white", () => {
+  const context = app();
+  for (const type of ["certifacts.answer", "finokf.cache_run", "finokf.chat_vault"]) {
+    assert.equal(context.nodeColor({type}), "#ffffff");
+  }
+});
+
 test("legacy Apple history is excluded from the current Microsoft answer", () => {
   const context = app();
   const apple = fixture("vault", "AAPL");
@@ -47,6 +54,19 @@ test("legacy Apple history is excluded from the current Microsoft answer", () =>
   assert.equal(result.nodes[2].path, "data/vaults/answers/vault/notes/turn-001-MSFT.md");
   assert.ok(result.nodes.every(node => !node.id.includes("AAPL")));
   assert.equal(result.links.length, 2);
+});
+
+test("cumulative vault graph keeps prior company when the next question switches tickers", () => {
+  const context = app();
+  const vault = fixture("vault", "AAPL");
+  const microsoft = fixture("vault", "MSFT").nodes[0];
+  vault.runs.push({turn: 2, question: "How did MSFT operating leverage change in FY2024 and FY2025?"});
+  vault.graph.scope = "vault";
+  vault.graph.nodes.push({id: "vault:2"}, microsoft);
+  vault.graph.links.push({source: "vault", target: "vault:2"}, {source: "vault:2", target: microsoft.id});
+  const result = context.answerGraphData(vault, vault.graph);
+  assert.deepEqual(new Set(result.nodes.filter(n => n.ticker).map(n => n.ticker)), new Set(["AAPL", "MSFT"]));
+  assert.ok(result.nodes.some(n => n.id === "vault:2"));
 });
 
 test("comparisons keep both companies, but duplicate paths appear once", () => {
@@ -198,4 +218,26 @@ test("agent answers render collapsed with a show more toggle", () => {
   assert.equal(card.querySelector(".agent-body").hidden, false);
   assert.equal(card.querySelector(".agent-preview").hidden, true);
   assert.equal(card.children.find(child => child.className === "agent-extra").hidden, false);
+});
+
+test("FinOKF source panel lists a copied filing once even when the result repeats its path", () => {
+  const context = app();
+  function fakeElement(tag = "div") {
+    const element = {tag, children: [], dataset: {}, className: "", hidden: false, textContent: "", attributes: {}, events: {},
+      setAttribute(name, value) { this.attributes[name] = value; }, addEventListener(name, handler) { this.events[name] = handler; },
+      appendChild(child) { this.children.push(child); return child; }, append(...children) { children.forEach(child => this.appendChild(child)); },
+      querySelector(selector) { return this.selectors?.[selector] || null; }};
+    Object.defineProperty(element, "innerHTML", {get() { return this.html || ""; }, set(value) { this.html = value; if (value.includes("agent-preview")) this.selectors = {".agent-preview": fakeElement(), ".agent-body": fakeElement()}; }});
+    return element;
+  }
+  context.document.createElement = fakeElement;
+  context.fakeChatMessages = {scrollTop: 0, scrollHeight: 0};
+  vm.runInContext("els.chatMessages = fakeChatMessages;", context);
+  const filing = {title: "AAPL-FY2025-10-K.md", path: "data/vaults/aapl/documents/filing.md", source_path: "data/processed/filings/AAPL/AAPL-FY2025-10-K.md"};
+  const card = fakeElement();
+  context.renderAgentResult(card, {agent: "finokf", answer: "Answer", source_files: [filing], sources: [filing.source_path, filing.source_path]});
+  const extra = card.children.find(child => child.className === "agent-extra");
+  const details = extra.children.find(child => child.tag === "details");
+  assert.equal(details.children.length, 2); // summary plus one filing row
+  assert.match(details.children[0].textContent, /Source files and evidence \(1\)/);
 });

@@ -33,6 +33,8 @@ const state = {
   vaultHistoryOpen: false,
   providerPanelOpen: false,
   llmProvider: "",
+  providerVerified: false,
+  providerVerifying: false,
   agentRunning: false,
 };
 
@@ -92,7 +94,10 @@ const els = {
   providerPanel: document.getElementById("providerPanel"),
   providerChoices: [...document.querySelectorAll(".provider-choice")],
   providerFields: [...document.querySelectorAll("[data-provider-fields]")],
+  providerSetButton: document.getElementById("providerSetButton"),
   providerChangeButton: document.getElementById("providerChangeButton"),
+  providerVerificationMark: document.getElementById("providerVerificationMark"),
+  providerVerificationStatus: document.getElementById("providerVerificationStatus"),
   openaiApiKey: document.getElementById("openaiApiKey"),
   openaiModel: document.getElementById("openaiModel"),
   anthropicApiKey: document.getElementById("anthropicApiKey"),
@@ -102,7 +107,7 @@ const els = {
   chatMessages: document.getElementById("chatMessages"),
   chatForm: document.getElementById("chatForm"),
   chatInput: document.getElementById("chatInput"),
-  chatButton: document.querySelector("#chatForm button"),
+  chatButton: document.querySelector("#chatForm button[type='submit']"),
   activeVaultLabel: document.getElementById("activeVaultLabel"),
   historyButton: document.getElementById("historyButton"),
   vaultHistoryPanel: document.getElementById("vaultHistoryPanel"),
@@ -132,7 +137,7 @@ function nodeKind(type) {
   if (type === "finance.source") return "source";
   if (type === "finokf.bundle_view") return "bundle";
   if (type === "finance.constraint") return "constraint";
-  if (type === "certifacts.answer") return "answer";
+  if (["certifacts.answer", "finokf.cache_run", "finokf.chat_vault"].includes(type)) return "answer";
   if (type === "certifacts.claim") return "claim";
   if (type === "finokf.skill_run") return "skill";
   if (type === "finokf.run_manifest") return "manifest";
@@ -270,15 +275,25 @@ function renderProviderControls() {
       input.disabled = state.agentRunning || !shown;
     });
   }
-  els.providerChangeButton.disabled = state.agentRunning || !state.llmProvider;
+  els.providerSetButton.disabled = state.agentRunning || !state.llmProvider || state.providerVerifying;
+  els.providerChangeButton.disabled = state.agentRunning || !state.llmProvider || state.providerVerifying;
   els.providerButton.disabled = state.agentRunning;
-  els.providerButton.classList.toggle("connected", Boolean(state.llmProvider));
+  els.providerButton.classList.toggle("connected", state.providerVerified);
+  els.providerVerificationMark.hidden = !state.providerVerified;
+  els.providerSetButton.textContent = state.providerVerifying ? "Checking…" : "Set API";
   if (state.agentRunning) setProviderPanel(false);
+}
+
+function resetProviderVerification(message = "") {
+  state.providerVerified = false;
+  els.providerVerificationStatus.textContent = message;
+  els.providerVerificationStatus.dataset.state = message ? "idle" : "";
 }
 
 function chooseProvider(provider) {
   if (state.agentRunning || state.llmProvider) return;
   state.llmProvider = provider;
+  resetProviderVerification();
   renderProviderControls();
   const firstField = els.providerPanel.querySelector(`[data-provider-fields="${provider}"] input`);
   if (firstField) firstField.focus();
@@ -287,7 +302,36 @@ function chooseProvider(provider) {
 function clearProviderChoice() {
   if (state.agentRunning) return;
   state.llmProvider = "";
+  state.providerVerifying = false;
+  resetProviderVerification();
   renderProviderControls();
+}
+
+async function verifyProvider() {
+  if (state.agentRunning || state.providerVerifying || !state.llmProvider) return;
+  const providerConfig = selectedProviderConfig();
+  if (!providerConfig) return;
+  state.providerVerifying = true;
+  resetProviderVerification("Checking API and model…");
+  renderProviderControls();
+  try {
+    const response = await fetch("/api/verify-provider", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider_config: providerConfig }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    state.providerVerified = true;
+    els.providerVerificationStatus.textContent = `Verified · ${result.model}`;
+    els.providerVerificationStatus.dataset.state = "success";
+  } catch (error) {
+    resetProviderVerification(`Verification failed: ${error.message}`);
+    els.providerVerificationStatus.dataset.state = "error";
+  } finally {
+    state.providerVerifying = false;
+    renderProviderControls();
+  }
 }
 
 function setAgentRunning(running) {
@@ -1010,14 +1054,44 @@ function renderAgentResult(element, result) {
     els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
   });
   element.appendChild(answerButton);
-  if (result.sources?.length) {
+  const sourceKey = source => {
+    const value = typeof source === "string" ? source : (source.source_path || source.url || source.path || "");
+    return normalizePath(value).replace(/^data\/processed\//, "");
+  };
+  const sourceFiles = result.source_files || [];
+  const copiedKeys = new Set(sourceFiles.map(sourceKey));
+  const dedupeSources = items => {
+    const seen = new Set();
+    return items.filter(source => {
+      const key = sourceKey(source);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const displayedSources = dedupeSources(sourceFiles.length
+    ? [...sourceFiles.map(file => ({...file, localCopy: true})), ...(result.sources || []).filter(source => {
+      const key = sourceKey(source);
+      return typeof source !== "string" || !copiedKeys.has(key);
+    })]
+    : (result.sources || []));
+  if (displayedSources.length) {
     const details = document.createElement("details");
     const summary = document.createElement("summary");
-    summary.textContent = `Evidence supplied (${result.sources.length})`;
+    summary.textContent = `Source files and evidence (${displayedSources.length})`;
     details.appendChild(summary);
-    for (const source of result.sources) {
+    for (const source of displayedSources) {
       const row = document.createElement("div");
-      if (typeof source === "string") {
+      if (source.localCopy) {
+        const link = document.createElement("a");
+        link.href = source.path;
+        link.textContent = source.title || source.source_path;
+        link.addEventListener("click", event => {
+          event.preventDefault();
+          openDocument(source.path, source.title, {editable: false, showMarkdown: true});
+        });
+        row.appendChild(link);
+      } else if (typeof source === "string") {
         row.textContent = source.includes("prices/") ? `Yahoo Finance · local CSV: ${source}` : source;
       } else if (/^https?:\/\//.test(source.url || "")) {
         const link = document.createElement("a");
@@ -1058,17 +1132,28 @@ function addComparison(answers) {
     ["Provider / model", (r) => `${r.provider || "—"} / ${r.model || "—"}`],
     ["Data access", (r) => r.data_access || "—"],
     ["Route", (r) => r.route || "—"],
+    ["Experiment", (r) => r.experiment || "standard"],
+    ["Cache / calculation", (r) => r.cache_kind || (r.cache_hit ? "cache hit" : "uncached")],
     ["Cache hit", (r) => r.cache_hit ? "Yes" : "No"],
     ["Elapsed (ms)", (r) => number(r.metrics?.total_ms)],
+    ["Non-model elapsed (ms)", (r) => number(r.metrics?.local_ms)],
     ["Model time (ms)", (r) => number(r.metrics?.model_ms)],
+    ["Model calls", (r) => number(r.metrics?.model_calls)],
+    ["Model attempts", (r) => number(r.metrics?.model_attempts)],
+    ["Token accounting", (r) => r.metrics?.usage_complete === false ? "Incomplete: provider usage unavailable for some calls" : r.metrics?.usage_complete === true ? "Complete" : "Not recorded"],
+    ["Inference record", (r) => r.route === "compiled-program" && r.metrics?.total_tokens === 0 ? "Historical calculation: no model call" : "Provider-reported usage"],
+    ["Routing (ms)", (r) => number(r.metrics?.route_ms)],
+    ["Binding / arithmetic (ms)", (r) => number(r.metrics?.bind_ms)],
+    ["Vault persistence (ms)", (r) => number(r.metrics?.persist_ms)],
     ["Input tokens", (r) => number(r.metrics?.prompt_tokens)],
     ["Output tokens", (r) => number(r.metrics?.completion_tokens)],
     ["Total tokens", (r) => number(r.metrics?.total_tokens)],
     ["Web searches", (r) => number(r.metrics?.web_requests)],
-    ["Web pages fetched", (r) => number(r.metrics?.page_requests)],
+    ["Web page requests", (r) => number(r.metrics?.page_requests)],
+    ["Web pages read", (r) => number(r.metrics?.pages_fetched)],
     ["Evidence sources", (r) => number(r.metrics?.source_count)],
   ];
-  panel.innerHTML = `<table><caption>Measured for this question</caption><thead><tr><th scope="col">Metadata</th><th scope="col">Naive</th><th scope="col">FinOKF</th></tr></thead><tbody>${rows.map(([label, read]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(read(naive))}</td><td>${escapeHtml(read(finokf))}</td></tr>`).join("")}</tbody></table><p>Naive totals include query planning and synthesis. Cache replays consume zero new model tokens. Elapsed time includes shared-resource contention; speed and accuracy are not guaranteed.</p>`;
+  panel.innerHTML = `<table><caption>Measured for this question</caption><thead><tr><th scope="col">Metadata</th><th scope="col">Naive</th><th scope="col">FinOKF</th></tr></thead><tbody>${rows.map(([label, read]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(read(naive))}</td><td>${escapeHtml(read(finokf))}</td></tr>`).join("")}</tbody></table>`;
   button.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
     button.setAttribute("aria-expanded", String(!panel.hidden));
@@ -1109,7 +1194,7 @@ function answerGraphData(vault, payload) {
   const metadata = new Map((vault.nodes || []).map((node) => [node.id, node]));
   let nodes = payload.nodes || [];
   let links = payload.links || [];
-  if (vault.kind === "chat-vault" && latestRun) {
+  if (vault.kind === "chat-vault" && latestRun && payload.scope !== "vault") {
     // Legacy graph files contain every conversation turn. Show only the
     // current execution's actual bindings, including multi-company answers.
     const evidenceIds = new Set(latestRun.evidence_nodes
@@ -1257,9 +1342,9 @@ async function askLocalModel(question, onAnswer) {
 async function submitChat(value) {
   const question = value.trim();
   if (!question || state.agentRunning) return;
-  if (!state.llmProvider) {
+  if (!state.providerVerified) {
     setProviderPanel(true);
-    addChatMessage("assistant", "Choose ChatGPT, Anthropic, or Local LLM from the key button first.", "error");
+    addChatMessage("assistant", "Set and verify a model connection from the key button first.", "error");
     return;
   }
   addChatMessage("user", question);
@@ -1423,12 +1508,11 @@ class ForceGraph {
       const revealDelay = node.type === "finance.entity"
         ? 160 + centerProgress * 6200
         : 220 + centerProgress * 6500 + seed * 1300;
-      const startScale = first && largeLayout ? 0.018 : 1;
       return {
         ...node,
         deg: degree.get(node.id) || 0,
-        x: (!layoutModeChanged && prev?.x !== undefined) ? prev.x : targetX * startScale + Math.cos(index * 1.618) * (first && largeLayout ? 2.5 : 0),
-        y: (!layoutModeChanged && prev?.y !== undefined) ? prev.y : targetY * startScale + Math.sin(index * 1.618) * (first && largeLayout ? 2.5 : 0),
+        x: (!layoutModeChanged && prev?.x !== undefined) ? prev.x : targetX + Math.cos(index * 1.618) * (first && largeLayout ? 2.5 : 0),
+        y: (!layoutModeChanged && prev?.y !== undefined) ? prev.y : targetY + Math.sin(index * 1.618) * (first && largeLayout ? 2.5 : 0),
         layoutDx: (!layoutModeChanged && prev?.layoutDx !== undefined) ? prev.layoutDx : layoutDx,
         layoutDy: (!layoutModeChanged && prev?.layoutDy !== undefined) ? prev.layoutDy : layoutDy,
         revealDelay: prev?.revealDelay ?? (first && largeLayout ? revealDelay : 0),
@@ -1502,6 +1586,11 @@ class ForceGraph {
     return 1 - Math.pow(1 - value, 3);
   }
 
+  stockRevealScale(progress) {
+    if (progress >= 1) return 1;
+    return Math.max(0, this.easeOut(progress) + Math.sin(progress * Math.PI) * 0.1);
+  }
+
   /* ---- simulation ---- */
   step() {
     const nodes = this.nodes;
@@ -1567,14 +1656,13 @@ class ForceGraph {
       if (cluster && this.largeLayout) {
         let targetX = cluster.x;
         let targetY = cluster.y;
-        const progress = this.easeOut(this.revealProgress(node, now));
         if (node.type === "finance.entity") {
-          targetX = cluster.x * progress;
-          targetY = cluster.y * progress;
+          targetX = cluster.x;
+          targetY = cluster.y;
         } else {
           const hub = this.companyNodes.get(String(node.ticker || "UNKNOWN"));
-          targetX = (hub?.x ?? cluster.x) + node.layoutDx * progress;
-          targetY = (hub?.y ?? cluster.y) + node.layoutDy * progress;
+          targetX = (hub?.x ?? cluster.x) + node.layoutDx;
+          targetY = (hub?.y ?? cluster.y) + node.layoutDy;
         }
         const spring = 0.026 + this.CLUSTER_GRAVITY * Math.max(0.22, alpha);
         node.vx += (targetX - node.x) * spring;
@@ -1808,7 +1896,8 @@ class ForceGraph {
     for (const node of this.nodes) {
       const reveal = this.revealProgress(node, now);
       if (reveal <= 0.01) continue;
-      const r = Math.max(this.radius(node), (node.type === "finance.entity" ? 2.8 : 0.65) / t.k);
+      const revealScale = node.type === "finance.entity" ? this.stockRevealScale(reveal) : 1;
+      const r = Math.max(this.radius(node) * revealScale, (node.type === "finance.entity" ? 2.8 : 0.65) / t.k);
       const selected = node.id === this.selectedId;
       const hovered = node.id === this.hoverId;
       const dim = active && !active.has(node.id);
@@ -1913,7 +2002,18 @@ function bindEvents() {
   for (const button of els.providerChoices) {
     button.addEventListener("click", () => chooseProvider(button.dataset.provider));
   }
+  els.providerSetButton.addEventListener("click", verifyProvider);
   els.providerChangeButton.addEventListener("click", clearProviderChoice);
+  for (const group of els.providerFields) {
+    group.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("input", () => {
+        if (state.llmProvider && !state.providerVerifying) {
+          resetProviderVerification();
+          renderProviderControls();
+        }
+      });
+    });
+  }
 
   els.chatForm.addEventListener("submit", (event) => { event.preventDefault(); submitChat(els.chatInput.value); });
   els.historyButton.addEventListener("click", () => toggleVaultHistory());

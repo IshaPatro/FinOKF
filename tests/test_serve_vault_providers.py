@@ -16,6 +16,38 @@ SPEC.loader.exec_module(MODULE)
 
 
 class ProviderConfigTests(unittest.TestCase):
+    def test_missing_usage_is_unknown_and_total_is_derived_only_from_reported_counts(self):
+        self.assertEqual(MODULE.token_usage(11, 7)["total_tokens"], 18)
+        missing = MODULE.token_usage(None, None)
+        self.assertIsNone(missing["total_tokens"])
+        self.assertFalse(missing["usage_complete"])
+        summed = MODULE.sum_usage(MODULE.token_usage(11, 7), missing)
+        self.assertIsNone(summed["prompt_tokens"])
+        self.assertFalse(summed["usage_complete"])
+
+    def test_openai_missing_usage_does_not_become_zero(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b'{"output_text":"Analyst answer"}'
+        with mock.patch.object(MODULE.urlrequest, "urlopen", return_value=response):
+            _, usage, _ = MODULE.call_openai("system", "question", {"api_key": "test", "model": "gpt-5-mini"})
+        self.assertIsNone(usage["total_tokens"])
+        self.assertFalse(usage["usage_complete"])
+
+    def test_verify_llm_config_makes_a_minimal_model_check(self):
+        config = {"provider": "openai", "model": "gpt-5-mini", "url": "", "api_key": "sk-test"}
+        with mock.patch.object(MODULE, "call_llm", return_value=("OK", {"total_tokens": 2}, 4.5)) as call:
+            result = MODULE.verify_llm_config(config)
+
+        self.assertEqual(result["provider"], "openai")
+        self.assertEqual(result["model"], "gpt-5-mini")
+        self.assertEqual(result["model_ms"], 4.5)
+        call.assert_called_once_with(
+            "You are a connection verifier. Reply with exactly: OK",
+            "Connection test. Reply with exactly: OK",
+            config,
+        )
+
     def test_chatgpt_alias_maps_to_openai(self):
         config = MODULE.llm_config_from_payload({"provider_config": {"provider": "chatgpt", "api_key": "sk-test"}})
 

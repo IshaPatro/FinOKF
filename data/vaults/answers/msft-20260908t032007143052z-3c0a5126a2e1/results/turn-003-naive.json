@@ -1,0 +1,32 @@
+{
+  "agent": "naive",
+  "provider": "ollama",
+  "model": "llama3.2:3b",
+  "route": "web-research",
+  "cache_hit": false,
+  "experiment": "standard baseline",
+  "data_access": "Public web search and page retrieval; independent numerical review; uncached",
+  "ok": false,
+  "error": "Internet research unavailable: Search unavailable: Web search returned no usable results.; Search unavailable: HTTP Error 500: INKApi Error; Search unavailable: Web search returned no usable results.",
+  "answer": "Naive could not complete this answer: Internet research unavailable: Search unavailable: Web search returned no usable results.; Search unavailable: HTTP Error 500: INKApi Error; Search unavailable: Web search returned no usable results.",
+  "sources": [],
+  "warnings": [
+    "Search unavailable: Web search returned no usable results.",
+    "Search unavailable: HTTP Error 500: INKApi Error",
+    "Search unavailable: Web search returned no usable results."
+  ],
+  "metrics": {
+    "prompt_tokens": 155,
+    "completion_tokens": 72,
+    "total_tokens": 227,
+    "model_ms": 941.239,
+    "total_ms": 1913.27,
+    "page_requests": 0,
+    "pages_fetched": 0,
+    "model_calls": 1,
+    "model_attempts": 1,
+    "usage_complete": true,
+    "web_requests": 3,
+    "source_count": 0
+  }
+}

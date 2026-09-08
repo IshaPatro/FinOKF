@@ -42,7 +42,10 @@
             </svg>
           </button>
           <section id="providerPanel" class="provider-panel" hidden aria-label="Model provider connection">
-            <div class="provider-panel-title">Model connection</div>
+            <div class="provider-panel-heading">
+              <div class="provider-panel-title">Model connection</div>
+              <span id="providerVerificationMark" class="provider-verification-mark" hidden aria-label="Model connection verified" title="API and model verified">&#10003;</span>
+            </div>
             <div class="provider-choice-grid" role="group" aria-label="Choose model provider">
               <button class="provider-choice" type="button" data-provider="openai">ChatGPT</button>
               <button class="provider-choice" type="button" data-provider="anthropic">Anthropic</button>
@@ -79,7 +82,11 @@
                 <input id="ollamaModel" type="text" autocomplete="off" spellcheck="false" value="llama3.2:3b" />
               </label>
             </div>
-            <button id="providerChangeButton" class="provider-change" type="button" disabled>Change provider</button>
+            <div id="providerVerificationStatus" class="provider-verification-status" role="status" aria-live="polite"></div>
+            <div class="provider-actions">
+              <button id="providerSetButton" class="provider-change" type="button" disabled>Set API</button>
+              <button id="providerChangeButton" class="provider-change" type="button" disabled>Change provider</button>
+            </div>
           </section>
         </nav>
 
@@ -119,6 +126,10 @@
           <div class="chat-head-copy">
             <div class="chat-head-title">Research comparison</div>
           </div>
+        </div>
+        <div class="chat-disclaimer">
+          <span>For a new chat, go to Home.</span>
+          <span>This chat has no persistent memory; include full context in every question. Caching is not shared across vaults; each vault has its own cache.</span>
         </div>
         <section id="vaultInspector" class="vault-inspector" hidden aria-label="Clearbox cache vault">
           <div class="vault-inspector-head">

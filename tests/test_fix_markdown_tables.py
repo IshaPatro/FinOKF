@@ -17,6 +17,37 @@ class MeasurementTests(unittest.TestCase):
         repaired, _ = MODULE.repair_document(markdown)
         return repaired
 
+    def test_units_row_is_copied_across_all_value_columns(self):
+        source = """| October 27, 2019 | Cost | Gross Unrealized Gains | Gross Unrealized Losses | Estimated Fair Value |
+| --- | --- | --- | --- | --- |
+|  | (In millions) |  |  |  |
+| Cash | $ 1,071 | $ — | $ — | $ 1,071 |
+| Money market funds | $ 1,677 | — | — | 1,677 |
+"""
+        repaired = self.repair(source)
+        self.assertIn(
+            "|  | (In millions) | (In millions) | (In millions) | (In millions) |",
+            repaired,
+        )
+        self.assertIn("| Money market funds | $ 1,677M | — | — | $ 1,677M |", repaired)
+
+    def test_units_row_with_per_share_exception_is_copied(self):
+        source = """|  | Three Months Ended April 26, 2020 | April 28, 2019 | Six Months Ended April 26, 2020 | April 28, 2019 |
+| --- | --- | --- | --- | --- |
+|  | (In millions, except per share amounts) |  |  |  |
+| Net income | $ 755 | $ 666 | $ 1,647 | $ 1,437 |
+| Weighted average common shares outstanding | 917 | 942 | 917 | 950 |
+| Basic earnings per share | $ 0.82 | $ 0.71 | $ 1.80 | $ 1.51 |
+"""
+        repaired = self.repair(source)
+        self.assertIn(
+            "|  | (In millions, except per share amounts) | (In millions, except per share amounts) | (In millions, except per share amounts) | (In millions, except per share amounts) |",
+            repaired,
+        )
+        self.assertIn("| Net income | $ 755M | $ 666M | $ 1,647M | $ 1,437M |", repaired)
+        self.assertIn("| Weighted average common shares outstanding | 917M | 942M | 917M | 950M |", repaired)
+        self.assertIn("| Basic earnings per share | $ 0.82 | $ 0.71 | $ 1.80 | $ 1.51 |", repaired)
+
     def test_mixed_share_count_currency_and_per_share_scales(self):
         source = """Share activity follows (in millions, except number of shares, which are reflected in thousands, and per share amounts):
 
