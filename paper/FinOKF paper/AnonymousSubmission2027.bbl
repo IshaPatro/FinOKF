@@ -1,0 +1,94 @@
+\begin{thebibliography}{12}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem[{{Apple Inc.}(2024)}]{apple2024results}
+{Apple Inc.} 2024.
+\newblock FY2024 Q4 Consolidated Financial Statements.
+\newblock
+  \url{https://www.apple.com/newsroom/pdfs/fy2024-q4/FY24_Q4_Consolidated_Financial_Statements.pdf}.
+
+\bibitem[{{Apple Inc.}(2025)}]{apple2025results}
+{Apple Inc.} 2025.
+\newblock FY2025 Q4 Consolidated Financial Statements.
+\newblock
+  \url{https://www.apple.com/newsroom/pdfs/fy2025-q4/FY25_Q4_Consolidated_Financial_Statements.pdf}.
+
+\bibitem[{Chen et~al.(2021)Chen, Chen, Smiley, Shah, Borova, Langdon, Moussa,
+  Beane, Huang, Routledge, and Wang}]{chen2021finqa}
+Chen, Z.; Chen, W.; Smiley, C.; Shah, S.; Borova, I.; Langdon, D.; Moussa, R.;
+  Beane, M.; Huang, T.-H.; Routledge, B.; and Wang, W.~Y. 2021.
+\newblock {FinQA}: A Dataset of Numerical Reasoning over Financial Data.
+\newblock In \emph{Proceedings of the 2021 Conference on Empirical Methods in
+  Natural Language Processing}, 3697--3711. Association for Computational
+  Linguistics.
+
+\bibitem[{Gao et~al.(2023)Gao, Madaan, Zhou, Alon, Liu, Yang, Callan, and
+  Neubig}]{gao2023pal}
+Gao, L.; Madaan, A.; Zhou, S.; Alon, U.; Liu, P.; Yang, Y.; Callan, J.; and
+  Neubig, G. 2023.
+\newblock {PAL}: Program-aided Language Models.
+\newblock In \emph{Proceedings of the 40th International Conference on Machine
+  Learning}, volume 202 of \emph{Proceedings of Machine Learning Research},
+  10764--10799. PMLR.
+
+\bibitem[{{Google Cloud}(2026)}]{google2026okf}
+{Google Cloud}. 2026.
+\newblock Open Knowledge Format ({OKF}), Version 0.2.
+\newblock Pinned specification, commit
+  3fcbb9f828c2f23d109c855ee403c3a4c81f3a96,
+  \url{https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/3fcbb9f828c2f23d109c855ee403c3a4c81f3a96/okf/SPEC.md}.
+\newblock Accessed September 8, 2026.
+
+\bibitem[{Lewis et~al.(2020)Lewis, Perez, Piktus, Petroni, Karpukhin, Goyal,
+  K{\"u}ttler, Lewis, Yih, Rockt{\"a}schel, Riedel, and Kiela}]{lewis2020rag}
+Lewis, P.; Perez, E.; Piktus, A.; Petroni, F.; Karpukhin, V.; Goyal, N.;
+  K{\"u}ttler, H.; Lewis, M.; Yih, W.-t.; Rockt{\"a}schel, T.; Riedel, S.; and
+  Kiela, D. 2020.
+\newblock Retrieval-Augmented Generation for Knowledge-Intensive {NLP} Tasks.
+\newblock \emph{Advances in Neural Information Processing Systems}, 33.
+
+\bibitem[{{Microsoft}(2025)}]{msft2025report}
+{Microsoft}. 2025.
+\newblock Annual Report 2025.
+\newblock \url{https://www.microsoft.com/investor/reports/ar25/index.html}.
+
+\bibitem[{O'Neil, O'Neil, and Weikum(1993)}]{oneil1993lruk}
+O'Neil, E.~J.; O'Neil, P.~E.; and Weikum, G. 1993.
+\newblock The {LRU-K} Page Replacement Algorithm for Database Disk Buffering.
+\newblock In \emph{Proceedings of the 1993 {ACM} {SIGMOD} International
+  Conference on Management of Data}, 297--306. Association for Computing
+  Machinery.
+
+\bibitem[{Patro(2024)}]{patro2024financial}
+Patro, I. 2024.
+\newblock Unlocking Financial Wisdom: Building Knowledge Graphs From
+  Investopedia.
+\newblock \emph{International Journal of Research and Analytical Reviews},
+  11(3): 393--397.
+\newblock \url{https://www.ijrar.org/papers/IJRAR24C2439.pdf}.
+
+\bibitem[{{U.S. Securities and Exchange Commission}(2026)}]{secapi}
+{U.S. Securities and Exchange Commission}. 2026.
+\newblock {EDGAR} Application Programming Interfaces ({APIs}).
+\newblock
+  \url{https://www.sec.gov/search-filings/edgar-application-programming-interfaces}.
+\newblock Accessed September 8, 2026.
+
+\bibitem[{{XBRL International}(2026)}]{xbrl2026standard}
+{XBRL International}. 2026.
+\newblock The {XBRL} Standard.
+\newblock \url{https://specifications.xbrl.org/}.
+\newblock Accessed September 8, 2026.
+
+\bibitem[{Zhu et~al.(2021)Zhu, Lei, Huang, Wang, Zhang, Lv, Feng, and
+  Chua}]{zhu2021tatqa}
+Zhu, F.; Lei, W.; Huang, Y.; Wang, C.; Zhang, S.; Lv, J.; Feng, F.; and Chua,
+  T.-S. 2021.
+\newblock {TAT-QA}: A Question Answering Benchmark on a Hybrid of Tabular and
+  Textual Content in Finance.
+\newblock In \emph{Proceedings of the 59th Annual Meeting of the Association
+  for Computational Linguistics and the 11th International Joint Conference on
+  Natural Language Processing}, 3277--3287. Association for Computational
+  Linguistics.
+
+\end{thebibliography}

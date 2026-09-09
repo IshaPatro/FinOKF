@@ -1,0 +1,567 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.3.1)  8 SEP 2026 23:16
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**AnonymousSubmission2027.tex
+(./AnonymousSubmission2027.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2026-01-19>
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ba
+se/article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ba
+se/size10.clo
+File: size10.clo 2025/01/22 v1.4n Standard LaTeX file (size option)
+)
+\c@part=\count275
+\c@section=\count276
+\c@subsection=\count277
+\c@subsubsection=\count278
+\c@paragraph=\count279
+\c@subparagraph=\count280
+\c@figure=\count281
+\c@table=\count282
+\abovecaptionskip=\skip49
+\belowcaptionskip=\skip50
+\bibindent=\dimen148
+) (./aaai2027.sty
+Package: aaai2027 2027/05/04 AAAI 2027 Submission format
+
+Conference Style for AAAI for LaTeX 2e
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+iftex/iftex.sty
+Package: iftex 2024/12/12 v1.0g TeX engine tests
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ba
+se/fontenc.sty
+Package: fontenc 2025/07/18 v2.1d Standard LaTeX package
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ne
+wtx/newtxtext.sty
+Package: newtxtext 2024/04/01 v1.744(Michael Sharpe) latex and unicode latex su
+pport for TeXGyreTermesX
+
+`newtxtext' v1.744, 2024/04/01 Text macros taking advantage of TeXGyre Termes a
+nd its extensions (msharpe)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/xp
+atch/xpatch.sty
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/l3
+kernel/expl3.sty
+Package: expl3 2026-01-19 L3 programming layer (loader) 
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/l3
+backend/l3backend-pdftex.def
+File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count283
+))
+Package: xpatch 2020/03/25 v0.3a Extending etoolbox patching commands
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/l3
+packages/xparse/xparse.sty
+Package: xparse 2025-10-09 L3 Experimental document command parser
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/et
+oolbox/etoolbox.sty
+Package: etoolbox 2025/10/02 v2.5m e-TeX tools for LaTeX (JAW)
+\etb@tempcnta=\count284
+))
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/xc
+olor/xcolor.sty
+Package: xcolor 2024/09/29 v3.02 LaTeX color extensions (UK)
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics-cfg/color.cfg
+File: color.cfg 2016/01/02 v1.6 sample color configuration
+)
+Package xcolor Info: Driver file: pdftex.def on input line 274.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics-def/pdftex.def
+File: pdftex.def 2025/09/29 v1.2d Graphics/color driver for pdftex
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics/mathcolor.ltx)
+Package xcolor Info: Model `cmy' substituted by `cmy0' on input line 1349.
+Package xcolor Info: Model `hsb' substituted by `rgb' on input line 1353.
+Package xcolor Info: Model `RGB' extended on input line 1365.
+Package xcolor Info: Model `HTML' substituted by `rgb' on input line 1367.
+Package xcolor Info: Model `Hsb' substituted by `hsb' on input line 1368.
+Package xcolor Info: Model `tHsb' substituted by `hsb' on input line 1369.
+Package xcolor Info: Model `HSB' substituted by `hsb' on input line 1370.
+Package xcolor Info: Model `Gray' substituted by `gray' on input line 1371.
+Package xcolor Info: Model `wave' substituted by `hsb' on input line 1372.
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/xk
+eyval/xkeyval.sty
+Package: xkeyval 2025/11/04 v2.10 package option processing (HA)
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+xkeyval/xkeyval.tex
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+xkeyval/xkvutils.tex
+\XKV@toks=\toks17
+\XKV@tempa@toks=\toks18
+\XKV@tempb@toks=\toks19
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+xkeyval/keyval.tex))
+\XKV@depth=\count285
+File: xkeyval.tex 2014/12/03 v2.7a key=value parser (HA)
+))
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ba
+se/textcomp.sty
+Package: textcomp 2024/04/24 v2.1b Standard LaTeX package
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+xstring/xstring.sty
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+xstring/xstring.tex
+\xs_counta=\count286
+\xs_countb=\count287
+)
+Package: xstring 2023/08/22 v1.86 String manipulations (CT)
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ba
+se/ifthen.sty
+Package: ifthen 2024/03/16 v1.1e Standard LaTeX ifthen package (DPC)
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ca
+rlisle/scalefnt.sty)
+LaTeX Font Info:    Setting ntxLF sub-encoding to TS1/0 on input line 24.
+LaTeX Font Info:    Setting ntxTLF sub-encoding to TS1/0 on input line 24.
+LaTeX Font Info:    Setting ntxOsF sub-encoding to TS1/0 on input line 24.
+LaTeX Font Info:    Setting ntxTOsF sub-encoding to TS1/0 on input line 24.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/generic/
+kastrup/binhex.tex)
+\ntx@tmpcnta=\count288
+\ntx@cnt=\count289
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/fo
+ntaxes/fontaxes.sty
+Package: fontaxes 2026-01-02 v2.0.2 Font selection axes (deprecated)
+Applying: [0000-00-00] Fall back to v1 on input line 76.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/fo
+ntaxes/fontaxes-v1.sty
+Package: fontaxes 2020/07/21 v1.0e Font selection axes
+LaTeX Info: Redefining \upshape on input line 29.
+LaTeX Info: Redefining \itshape on input line 31.
+LaTeX Info: Redefining \slshape on input line 33.
+LaTeX Info: Redefining \swshape on input line 35.
+LaTeX Info: Redefining \scshape on input line 37.
+LaTeX Info: Redefining \sscshape on input line 39.
+LaTeX Info: Redefining \ulcshape on input line 41.
+LaTeX Info: Redefining \textsw on input line 47.
+LaTeX Info: Redefining \textssc on input line 48.
+LaTeX Info: Redefining \textulc on input line 49.
+))
+\tx@sixem=\dimen149
+\tx@y=\dimen150
+\tx@x=\dimen151
+\tx@tmpdima=\dimen152
+\tx@tmpdimb=\dimen153
+\tx@tmpdimc=\dimen154
+\tx@tmpdimd=\dimen155
+\tx@tmpdime=\dimen156
+\tx@tmpdimf=\dimen157
+\tx@dimA=\dimen158
+\tx@dimAA=\dimen159
+\tx@dimB=\dimen160
+\tx@dimBB=\dimen161
+\tx@dimC=\dimen162
+LaTeX Info: Redefining \oldstylenums on input line 902.
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ps
+nfss/helvet.sty
+Package: helvet 2020/03/25 PSNFSS-v9.3 (WaS) 
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ps
+nfss/courier.sty
+Package: courier 2020/03/25 PSNFSS-v9.3 (WaS) 
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/pl
+aceins/placeins.sty
+Package: placeins 2005/04/18  v 2.2
+)
+\titlebox=\skip51
+\aaai@thanksins=\insert252
+\aaai@copyrightins=\insert251
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ur
+l/url.sty
+\Urlmuskip=\muskip17
+Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics/graphicx.sty
+Package: graphicx 2024/12/31 v1.2e Enhanced LaTeX Graphics (DPC,SPQR)
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics/graphics.sty
+Package: graphics 2024/08/06 v1.4g Standard LaTeX Graphics (DPC,SPQR)
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics/trig.sty
+Package: trig 2023/12/02 v1.11 sin cos tan (DPC)
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/gr
+aphics-cfg/graphics.cfg
+File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
+)
+Package graphics Info: Driver file: pdftex.def on input line 106.
+)
+\Gin@req@height=\dimen163
+\Gin@req@width=\dimen164
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/na
+tbib/natbib.sty
+Package: natbib 2010/09/13 8.31b (PWD, AO)
+\bibhang=\skip52
+\bibsep=\skip53
+LaTeX Info: Redefining \cite on input line 694.
+\c@NAT@ctr=\count290
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ca
+ption/caption.sty
+Package: caption 2023/08/05 v3.6o Customizing captions (AR)
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ca
+ption/caption3.sty
+Package: caption3 2023/07/31 v2.4d caption3 kernel (AR)
+\caption@tempdima=\dimen165
+\captionmargin=\dimen166
+\caption@leftmargin=\dimen167
+\caption@rightmargin=\dimen168
+\caption@width=\dimen169
+\caption@indent=\dimen170
+\caption@parindent=\dimen171
+\caption@hangindent=\dimen172
+Package caption Info: Standard document class detected.
+)
+\c@caption@flags=\count291
+\c@continuedfloat=\count292
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/al
+gorithms/algorithm.sty
+Package: algorithm 2009/08/24 v0.1 Document Style `algorithm' - floating enviro
+nment
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/fl
+oat/float.sty
+Package: float 2001/11/08 v1.3d Float enhancements (AL)
+\c@float@type=\count293
+\float@exts=\toks20
+\float@box=\box53
+\@float@everytoks=\toks21
+\@floatcapt=\box54
+)
+\@float@every@algorithm=\toks22
+\c@algorithm=\count294
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/al
+gorithms/algorithmic.sty
+Package: algorithmic 2009/08/24 v0.1 Document Style `algorithmic'
+\c@ALC@unique=\count295
+\c@ALC@line=\count296
+\c@ALC@rem=\count297
+\c@ALC@depth=\count298
+\ALC@tlm=\skip54
+\algorithmicindent=\skip55
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ne
+wfloat/newfloat.sty
+Package: newfloat 2023/10/01 v1.2 Defining new floating environments (AR)
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/li
+stings/listings.sty
+\lst@mode=\count299
+\lst@gtempboxa=\box55
+\lst@token=\toks23
+\lst@length=\count300
+\lst@currlwidth=\dimen173
+\lst@column=\count301
+\lst@pos=\count302
+\lst@lostspace=\dimen174
+\lst@width=\dimen175
+\lst@newlines=\count303
+\lst@lineno=\count304
+\lst@maxwidth=\dimen176
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/li
+stings/lstpatch.sty
+File: lstpatch.sty 2025/11/14 1.11b (Carsten Heinz)
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/li
+stings/lstmisc.sty
+File: lstmisc.sty 2025/11/14 1.11b (Carsten Heinz)
+\c@lstnumber=\count305
+\lst@skipnumbers=\count306
+\lst@framebox=\box56
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/li
+stings/listings.cfg
+File: listings.cfg 2025/11/14 1.11b listings configuration
+))
+Package: listings 2025/11/14 1.11b (Carsten Heinz)
+
+==> First Aid for listings.sty no longer applied!
+    Expected:
+        2024/09/23 1.10c (Carsten Heinz)
+    but found:
+        2025/11/14 1.11b (Carsten Heinz)
+    so I'm assuming it got fixed.
+\@float@every@listing=\toks24
+\c@listing=\count307
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/bo
+oktabs/booktabs.sty
+Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
+\heavyrulewidth=\dimen177
+\lightrulewidth=\dimen178
+\cmidrulewidth=\dimen179
+\belowrulesep=\dimen180
+\belowbottomsep=\dimen181
+\aboverulesep=\dimen182
+\abovetopsep=\dimen183
+\cmidrulesep=\dimen184
+\cmidrulekern=\dimen185
+\defaultaddspace=\dimen186
+\@cmidla=\count308
+\@cmidlb=\count309
+\@aboverulesep=\dimen187
+\@belowrulesep=\dimen188
+\@thisruleclass=\count310
+\@lastruleclass=\count311
+\@thisrulewidth=\dimen189
+)
+LaTeX Font Info:    Trying to load font information for T1+ntxtlf on input line
+ 96.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ne
+wtx/t1ntxtlf.fd
+File: t1ntxtlf.fd 2021/05/24 v1.1 font definition file for T1/ntx/tlf
+)
+LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
+(Font)              scaled to size 10.0pt on input line 96.
+ (./AnonymousSubmission2027.aux)
+\openout1 = `AnonymousSubmission2027.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 96.
+LaTeX Font Info:    ... okay on input line 96.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/context/
+base/mkii/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count312
+\scratchdimen=\dimen190
+\scratchbox=\box57
+\nofMPsegments=\count313
+\nofMParguments=\count314
+\everyMPshowfont=\toks25
+\MPscratchCnt=\count315
+\MPscratchDim=\dimen191
+\MPnumerator=\count316
+\makeMPintoPDFobject=\count317
+\everyMPtoPDFconversion=\toks26
+)
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ep
+stopdf-pkg/epstopdf-base.sty
+Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
+85.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/la
+texconfig/epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
+e
+))
+\c@mv@tabular=\count318
+\c@mv@boldtabular=\count319
+Package caption Info: Begin \AtBeginDocument code.
+Package caption Info: float package is loaded.
+Package caption Info: listings package is loaded.
+Package caption Info: End \AtBeginDocument code.
+Package newfloat Info: `float' package detected.
+\c@lstlisting=\count320
+\c@aaai@eqfn=\count321
+\c@aaai@corrfn=\count322
+\titlearea=\box58
+LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
+(Font)              scaled to size 14.4pt on input line 97.
+LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
+(Font)              scaled to size 14.4pt on input line 97.
+LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
+(Font)              scaled to size 12.0pt on input line 97.
+LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
+(Font)              scaled to size 12.0pt on input line 97.
+\actualheight=\skip56
+LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
+(Font)              scaled to size 9.0pt on input line 97.
+LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
+(Font)              scaled to size 10.0pt on input line 99.
+<../assets/flowchart.png, id=1, 5013.73125pt x 3217.01875pt>
+File: ../assets/flowchart.png Graphic file (type png)
+<use ../assets/flowchart.png>
+Package pdftex.def Info: ../assets/flowchart.png  used on input line 120.
+(pdftex.def)             Requested size: 239.39438pt x 153.59538pt.
+ [1{/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-var/fonts/map/
+pdftex/updmap/pdftex.map}{/private/tmp/basictex-root/usr/local/texlive/2026basi
+c/texmf-dist/fonts/enc/dvips/newtx/ntx-ec-tlf.enc}
+
+
+
+]
+LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
+(Font)              scaled to size 10.95pt on input line 125.
+LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
+(Font)              scaled to size 10.95pt on input line 125.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <7> on input line 127.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <5> on input line 127.
+<../assets/model_results_vertical.png, id=10, 654.7662pt x 944.5689pt>
+File: ../assets/model_results_vertical.png Graphic file (type png)
+<use ../assets/model_results_vertical.png>
+Package pdftex.def Info: ../assets/model_results_vertical.png  used on input li
+ne 158.
+(pdftex.def)             Requested size: 189.3578pt x 273.16849pt.
+LaTeX Font Info:    Trying to load font information for T1+pcr on input line 16
+7.
+
+(/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/tex/latex/ps
+nfss/t1pcr.fd
+File: t1pcr.fd 2001/06/04 font definitions for T1/pcr.
+) [2{/private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/fonts/en
+c/dvips/base/8r.enc} <../assets/flowchart.png>]
+<../assets/knowledge_graph.png, id=21, 1957.3125pt x 1565.85pt>
+File: ../assets/knowledge_graph.png Graphic file (type png)
+<use ../assets/knowledge_graph.png>
+Package pdftex.def Info: ../assets/knowledge_graph.png  used on input line 173.
+
+(pdftex.def)             Requested size: 239.39438pt x 191.50172pt.
+ [3 <../assets/model_results_vertical.png> <../assets/knowledge_graph.png>] [4]
+<../assets/question_results_vertical.png, id=30, 655.0071pt x 944.5689pt>
+File: ../assets/question_results_vertical.png Graphic file (type png)
+<use ../assets/question_results_vertical.png>
+Package pdftex.def Info: ../assets/question_results_vertical.png  used on input
+ line 260.
+(pdftex.def)             Requested size: 189.42747pt x 273.16849pt.
+
+(./AnonymousSubmission2027.bbl
+LaTeX Font Info:    Font shape `T1/ntxtlf/m/it' will be
+(Font)              scaled to size 10.0pt on input line 22.
+ [5 <../assets/question_results_vertical.png>]
+Underfull \hbox (badness 5696) in paragraph at lines 35--41
+[]\T1/ntxtlf/m/n/10 Google Cloud. 2026.  Open Knowl-edge For-mat
+ []
+
+
+Underfull \hbox (badness 2600) in paragraph at lines 35--41
+\T1/ntxtlf/m/n/10 (OKF), Ver-sion 0.2.  Pinned spec-i-fi-ca-tion, com-mit
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 35--41
+\T1/ntxtlf/m/n/10 3fcbb9f828c2f23d109c855ee403c3a4c81f3a96, $https :
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 35--41
+\T1/ntxtlf/m/n/10 / / github . com / GoogleCloudPlatform / knowledge -[] catalo
+g /
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 35--41
+\T1/ntxtlf/m/n/10 blob / 3fcbb9f828c2f23d109c855ee403c3a4c81f3a96 / okf /
+ []
+
+
+Underfull \hbox (badness 6944) in paragraph at lines 71--76
+[]\T1/ntxtlf/m/n/10 U.S. Se-cu-ri-ties and Ex-change Com-mis-sion. 2026.
+ []
+
+
+Underfull \hbox (badness 2818) in paragraph at lines 71--76
+\T1/ntxtlf/m/n/10 EDGAR Ap-pli-ca-tion Pro-gram-ming In-ter-faces (APIs).
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 71--76
+\T1/ntxtlf/m/n/10 https : / / www . sec . gov / search -[] ^^\lings / edgar -[]
+ application -[]
+ []
+
+)
+Underfull \hbox (badness 10000) in paragraph at lines 289--290
+\T1/ntxtlf/m/n/10 The Mi-crosoft FY2025 fil-ing ac-ces-sion
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--290
+\T1/ntxtlf/m/n/10 is \T1/pcr/m/n/10 0000950170-25-100235\T1/ntxtlf/m/n/10 ; Ap-
+ple's is
+ []
+
+
+Underfull \hbox (badness 5741) in paragraph at lines 289--290
+\T1/pcr/m/n/10 0000320193-25-000079\T1/ntxtlf/m/n/10 . Mi-crosoft's con-sol-i-d
+ated
+ []
+
+[6] (../accuracy_audit/all_models_table.tex)
+Underfull \vbox (badness 2042) has occurred while \output is active []
+
+ [7]
+[8
+
+] (./AnonymousSubmission2027.aux)
+ ***********
+LaTeX2e <2025-11-01>
+L3 programming layer <2020/03/25>
+ ***********
+ ) 
+Here is how much of TeX's memory you used:
+ 7708 strings out of 469006
+ 130204 string characters out of 5454814
+ 557829 words of memory out of 5000000
+ 36300 multiletter control sequences out of 15000+600000
+ 657785 words of font info for 53 fonts, out of 8000000 for 9000
+ 319 hyphenation exceptions out of 8191
+ 89i,9n,117p,1326b,337s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/fonts/type
+1/public/amsfonts/cm/cmmi10.pfb></private/tmp/basictex-root/usr/local/texlive/2
+026basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></private/tmp/basi
+ctex-root/usr/local/texlive/2026basic/texmf-dist/fonts/type1/public/amsfonts/cm
+/cmr10.pfb></private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/f
+onts/type1/public/amsfonts/cm/cmr7.pfb></private/tmp/basictex-root/usr/local/te
+xlive/2026basic/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></private/
+tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist/fonts/type1/urw/courie
+r/ucrr8a.pfb></private/tmp/basictex-root/usr/local/texlive/2026basic/texmf-dist
+/fonts/type1/public/newtx/ztmb.pfb></private/tmp/basictex-root/usr/local/texliv
+e/2026basic/texmf-dist/fonts/type1/public/newtx/ztmr.pfb></private/tmp/basictex
+-root/usr/local/texlive/2026basic/texmf-dist/fonts/type1/public/newtx/ztmri.pfb
+>
+Output written on AnonymousSubmission2027.pdf (8 pages, 1820007 bytes).
+PDF statistics:
+ 87 PDF objects out of 1000 (max. 8388607)
+ 50 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 500000)
+ 21 words of extra memory for PDF output out of 10000 (max. 10000000)
+

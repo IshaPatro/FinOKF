@@ -1,0 +1,222 @@
+\makeatletter
+\@ifundefined{isChecklistMainFile}{
+  % We are compiling a standalone document
+  \newif\ifreproStandalone
+  \reproStandalonetrue
+}{
+  % We are being \input into the main paper
+  \newif\ifreproStandalone
+  \reproStandalonefalse
+}
+\makeatother
+
+\ifreproStandalone
+\documentclass[letterpaper]{article}
+\usepackage[submission]{aaai2027}
+\setlength{\pdfpagewidth}{8.5in}
+\setlength{\pdfpageheight}{11in}
+\frenchspacing
+
+\begin{document}
+\fi
+\setlength{\leftmargini}{20pt}
+\makeatletter\def\@listi{\leftmargin\leftmargini \topsep .5em \parsep .5em \itemsep .5em}
+\def\@listii{\leftmargin\leftmarginii \labelwidth\leftmarginii \advance\labelwidth-\labelsep \topsep .4em \parsep .4em \itemsep .4em}
+\def\@listiii{\leftmargin\leftmarginiii \labelwidth\leftmarginiii \advance\labelwidth-\labelsep \topsep .4em \parsep .4em \itemsep .4em}\makeatother
+
+\setcounter{secnumdepth}{0}
+\renewcommand\thesubsection{\arabic{subsection}}
+\renewcommand\labelenumi{\thesubsection.\arabic{enumi}}
+
+\newcounter{checksubsection}
+\newcounter{checkitem}[checksubsection]
+
+\newcommand{\checksubsection}[1]{%
+  \refstepcounter{checksubsection}%
+  \paragraph{\arabic{checksubsection}. #1}%
+  \setcounter{checkitem}{0}%
+}
+
+\newcommand{\checkitem}{%
+  \refstepcounter{checkitem}%
+  \item[\arabic{checksubsection}.\arabic{checkitem}.]%
+}
+\newcommand{\question}[2]{\normalcolor\checkitem #1 #2 \color{blue}}
+\newcommand{\ifyespoints}[1]{\makebox[0pt][l]{\hspace{-15pt}\normalcolor #1}}
+
+\section*{Reproducibility Checklist}
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\textbf{Instructions for Authors:}
+
+This document outlines key aspects for assessing reproducibility. Please provide your input by editing this \texttt{.tex} file directly.
+
+For each question (that applies), replace the ``Type your response here'' text with your answer.
+
+\vspace{1em}
+\noindent
+\textbf{Example:} If a question appears as
+%
+\begin{center}
+\noindent
+\begin{minipage}{.9\linewidth}
+\ttfamily\raggedright
+\string\question \{Proofs of all novel claims are included\} \{(yes/partial/no)\} \\
+Type your response here
+\end{minipage}
+\end{center}
+you would change it to:
+\begin{center}
+\noindent
+\begin{minipage}{.9\linewidth}
+\ttfamily\raggedright
+\string\question \{Proofs of all novel claims are included\} \{(yes/partial/no)\} \\
+yes
+\end{minipage}
+\end{center}
+%
+Please make sure to:
+\begin{itemize}\setlength{\itemsep}{.1em}
+\item Replace ONLY the ``Type your response here'' text and nothing else.
+\item Use one of the options listed for that question (e.g., \textbf{yes}, \textbf{no}, \textbf{partial}, or \textbf{NA}).
+\item \textbf{Not} modify any other part of the \texttt{\string\question} command or any other lines in this document.\\
+\end{itemize}
+
+You can \texttt{\string\input} this .tex file right before \texttt{\string\end\{document\}} of your main file or compile it as a stand-alone document. Check the instructions on your conference's website to see if you will be asked to provide this checklist with your paper or separately.
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+% The questions start here
+
+\checksubsection{General Paper Structure}
+\begin{itemize}
+
+\question{Includes a conceptual outline and/or pseudocode description of AI methods introduced}{(yes/partial/no/NA)}
+yes. The project documents the FinOKF and Naive agent workflows, deterministic FlashOKF lookup/arithmetic, evidence retrieval, cache behavior, and answer-vault generation in the repository README and implementation notes.
+
+\question{Clearly delineates statements that are opinions, hypothesis, and speculation from objective facts and results}{(yes/no)}
+yes. The documented system distinguishes measured facts, calculations, cached evidence, model-generated interpretations, warnings, and stated limitations; generated answers are not reused as new factual results.
+
+\question{Provides well-marked pedagogical references for less-familiar readers to gain background necessary to replicate the paper}{(yes/no)}
+yes. Background and replication context are provided through the README, QUESTIONS.md, implementation notes, and the References directory.
+
+\end{itemize}
+\checksubsection{Theoretical Contributions}
+\begin{itemize}
+
+\question{Does this paper make theoretical contributions?}{(yes/no)}
+no. The current project artifact is an implementation and computational evaluation artifact; no formal theorem or proof contribution is present in the repository.
+
+	\ifyespoints{\vspace{1.2em}If yes, please address the following points:}
+        \begin{itemize}
+	
+	\question{All assumptions and restrictions are stated clearly and formally}{(yes/partial/no)}
+	no. The parent answer is no because the current artifact does not make theoretical contributions; this conditional item is not applicable.
+
+	\question{All novel claims are stated formally (e.g., in theorem statements)}{(yes/partial/no)}
+	no. The parent answer is no because the current artifact does not make theoretical contributions; this conditional item is not applicable.
+
+	\question{Proofs of all novel claims are included}{(yes/partial/no)}
+	no. The parent answer is no because the current artifact does not make theoretical contributions; this conditional item is not applicable.
+
+	\question{Proof sketches or intuitions are given for complex and/or novel results}{(yes/partial/no)}
+	no. The parent answer is no because the current artifact does not make theoretical contributions; this conditional item is not applicable.
+
+	\question{Appropriate citations to theoretical tools used are given}{(yes/partial/no)}
+	no. The parent answer is no because the current artifact does not make theoretical contributions; this conditional item is not applicable.
+
+	\question{All theoretical claims are demonstrated empirically to hold}{(yes/partial/no/NA)}
+	NA. The parent answer is no because the current artifact does not make theoretical contributions.
+
+	\question{All experimental code used to eliminate or disprove claims is included}{(yes/no/NA)}
+	NA. The parent answer is no because the current artifact does not make theoretical contributions.
+	
+	\end{itemize}
+\end{itemize}
+
+\checksubsection{Dataset Usage}
+\begin{itemize}
+
+\question{Does this paper rely on one or more datasets?}{(yes/no)}
+yes. The reported evaluation uses Microsoft and Apple annual filing evidence and saved GPT-5.5, Claude Sonnet 5, and Llama 3.2 3B answer vaults. Yahoo Finance prices are part of the system corpus but are not evaluated in this paper.
+
+\ifyespoints{If yes, please address the following points:}
+\begin{itemize}
+
+	\question{A motivation is given for why the experiments are conducted on the selected datasets}{(yes/partial/no/NA)}
+	yes. The README and QUESTIONS.md motivate SEC filings and selected S\&P 100 company workloads for annual financial-measurement, margin, cash-conversion, operating-leverage, routing, citation, token, and cache comparisons.
+
+	\question{All novel datasets introduced in this paper are included in a data appendix}{(yes/partial/no/NA)}
+	partial. The accuracy appendix identifies all six model/company vaults, 42 attempts, source filings, reference inputs, scoring panel, and per-model findings. The repository includes a machine-readable audit; a separately licensed public dataset release is not yet specified.
+
+	\question{All novel datasets introduced in this paper will be made publicly available upon publication of the paper with a license that allows free usage for research purposes}{(yes/partial/no/NA)}
+	partial. The repository contains a LICENSE file and local generated data artifacts, but the repository does not state a final public release URL or explicit publication-time license terms for derived data.
+
+	\question{All datasets drawn from the existing literature (potentially including authors' own previously published work) are accompanied by appropriate citations}{(yes/no/NA)}
+	yes. The evaluated filing evidence is identified by issuer and accession, with citations to SEC EDGAR and the Microsoft and Apple issuer publications used to cross-check the numerical references.
+
+	\question{All datasets drawn from the existing literature (potentially including authors' own previously published work) are publicly available}{(yes/partial/no/NA)}
+	yes. The source data systems documented for the current project are public SEC EDGAR filings and public Yahoo Finance price downloads.
+
+	\question{All datasets that are not publicly available are described in detail, with explanation why publicly available alternatives are not scientifically satisficing}{(yes/partial/no/NA)}
+	NA. No non-public source dataset is documented in the repository.
+
+\end{itemize}
+\end{itemize}
+
+\checksubsection{Computational Experiments}
+\begin{itemize}
+
+\question{Does this paper include computational experiments?}{(yes/no)}
+yes. The paper audits 42 saved FinOKF and Naive attempts across three models and compares costs over 16 matched successful-status pairs. Five Claude baseline attempts fail without text; these remain included in status and accuracy accounting. No controlled cold-versus-warm experiment is claimed.
+
+\ifyespoints{If yes, please address the following points:}
+\begin{itemize}
+
+	\question{This paper states the number and range of values tried per (hyper-) parameter during development of the paper, along with the criterion used for selecting the final parameter setting}{(yes/partial/no/NA)}
+	partial. Final request limits, cache behavior, prompt-output caps, provider defaults, and selected workloads are documented, but development-time parameter ranges and selection criteria are not fully stated.
+
+	\question{Any code required for pre-processing data is included in the appendix}{(yes/partial/no)}
+	partial. Preprocessing code is supplied in repository scripts for SEC fetching, sec2md processing, table repair, price downloads, and index building; it is not printed in the paper appendix.
+
+	\question{All source code required for conducting and analyzing the experiments is included in a code appendix}{(yes/partial/no)}
+	partial. The repository contains backend, UI, preprocessing, tests, and paper/audit\_all\_models.py with its reference-parser dependency. The appendix gives the audit command and artifacts; code is supplied in the repository rather than printed in the appendix.
+
+	\question{All source code required for conducting and analyzing the experiments will be made publicly available upon publication of the paper with a license that allows free usage for research purposes}{(yes/partial/no)}
+	partial. The repository contains a LICENSE file, but the current materials do not state the final public release URL or publication-time code-availability statement.
+        
+	\question{All source code implementing new methods have comments detailing the implementation, with references to the paper where each step comes from}{(yes/partial/no)}
+	partial. The implementation contains docstrings, comments, README explanations, and tests for core behavior, but code comments do not systematically reference paper sections for every new-method step.
+
+	\question{If an algorithm depends on randomness, then the method used for setting seeds is described in a way sufficient to allow replication of results}{(yes/partial/no/NA)}
+	partial. The retrospective numerical audit is deterministic and reuses saved answers without new inference. Reproducing model-generated answers may involve sampling and service variability; the original runs do not provide a complete reproducibility contract for that randomness.
+
+	\question{This paper specifies the computing infrastructure used for running experiments (hardware and software), including GPU/CPU models; amount of memory; operating system; names and versions of relevant software libraries and frameworks}{(yes/partial/no)}
+	partial. The README specifies Python scripts, optional packages, Ollama defaults, provider options, and server settings, but hardware, memory, operating-system details, and exact dependency versions are not fully specified in the repository.
+
+	\question{This paper formally describes evaluation metrics used and explains the motivation for choosing these metrics}{(yes/partial/no)}
+	yes. The paper applies the same 37-entry panel to every model and agent, yielding 222 checks over 15 distinct reference measurements. It separates correct, incorrect or inconsistent, omitted, and unavailable entries, and reports narrative defects separately. Rounding tolerance, paired costs, completion status, and source-copy traceability are defined.
+
+	\question{This paper states the number of algorithm runs used to compute each reported result}{(yes/no)}
+	yes. Seven questions, three models, and two agents yield 42 saved attempts with 37 successful statuses and 16 matched successful-status pairs. FinOKF cache hits number 7/7 for GPT-5.5, 7/7 for Claude Sonnet 5, and 3/7 for Llama 3.2 3B. No independent repeated trials are claimed.
+
+	\question{Analysis of experiments goes beyond single-dimensional summaries of performance (e.g., average; median) to include measures of variation, confidence, or other distributional information}{(yes/no)}
+	yes. The paper includes per-question cost plots, per-model completion and error categories, and per-question audit results in addition to means. It does not claim confidence intervals or statistical independence for repeated measurements across follow-ups.
+
+	\question{The significance of any improvement or decrease in performance is judged using appropriate statistical tests (e.g., Wilcoxon signed-rank)}{(yes/partial/no)}
+	no. No statistical significance test is documented in the current repository.
+
+	\question{This paper lists all final (hyper-)parameters used for each model/algorithm in the paper’s experiments}{(yes/partial/no/NA)}
+	partial. The paper reports recorded identifiers gpt-5.5, claude-sonnet-5, and llama3.2:3b, along with cache capacity, expiration rules, and workload. Original inference settings, development-time choices, and execution environment details are not completely pinned.
+
+
+\end{itemize}
+\end{itemize}
+\ifreproStandalone
+\end{document}
+\fi
